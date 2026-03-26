@@ -66,6 +66,10 @@ auto_approve_devices() {
 }
 
 while true; do
+    # Fix plugin ownership for dev mode: bind-mounted plugins inherit host uid,
+    # but OpenClaw requires root ownership. Safe no-op in production (already root).
+    chown -R root:root /root/.openclaw/extensions 2>/dev/null || true
+
     install_plugin_deps
     scan_data_directories
     openclaw gateway --port 18789 &
