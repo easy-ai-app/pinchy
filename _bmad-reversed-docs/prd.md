@@ -1,5 +1,5 @@
 ---
-stepsCompleted: [step-01-init, step-02-discovery, step-02b-vision, step-02c-executive-summary, step-03-success, step-04-journeys, step-05-domain, step-06-innovation, step-07-project-type, step-08-scoping, step-09-functional, step-10-nonfunctional, step-11-polish, step-12-complete]
+stepsCompleted: [step-01-init, step-02-discovery, step-02b-vision, step-02c-executive-summary, step-03-success, step-04-journeys, step-05-domain, step-06-innovation, step-07-project-type, step-08-scoping, step-09-functional, step-10-nonfunctional, step-11-polish, step-12-complete, step-e-01-discovery, step-e-02-review, step-e-03-edit]
 inputDocuments:
   - _bmad-reversed-docs/product-brief.md
   - _bmad-reversed-docs/research/technical-pinchy-research-2026-03-26.md
@@ -7,7 +7,9 @@ inputDocuments:
   - _bmad-reversed-docs/project-docs/api-contracts.md
   - _bmad-reversed-docs/project-docs/data-models.md
   - CLAUDE.md
+  - git log (sha/reverse branch, 54 commits since main divergence)
 workflowType: 'prd'
+workflow: 'edit'
 classification:
   projectType: saas_b2b
   domain: enterprise_ai_governance
@@ -18,13 +20,20 @@ documentCounts:
   researchCount: 1
   brainstormingCount: 0
   projectDocsCount: 3
+lastEdited: '2026-03-26'
+editHistory:
+  - date: '2026-03-26'
+    changes: 'Added Telegram integration (FR63-FR72), Skills Hub (FR73-FR76), chat UI enhancements (FR77-FR79), session migration (FR80), z.ai provider, NFR23-26 for OpenClaw config reliability, 2 new user journeys, updated scope/permissions/innovation sections'
+  - date: '2026-03-26'
+    changes: 'Post-validation edits: Added Journey 8 (Skills Hub), added EU AI Act Article 19(1)(d) and GDPR Articles 17/25/35 references, added SOC 2/ISO 27001 posture, cleaned implementation leakage from FR7/FR9/FR14/FR30/FR48/FR50 and NFR23/NFR25/NFR26, removed FR80 (reclassified as migration task)'
 ---
 
 # Product Requirements Document - Pinchy
 
 **Author:** Max
 **Date:** 2026-03-26
-**Status:** Reverse-engineered from production codebase (671 commits, ~63,500 LOC)
+**Last Edited:** 2026-03-26
+**Status:** Reverse-engineered from production codebase, updated to reflect `sha/reverse` branch (725+ commits)
 
 ## Executive Summary
 
@@ -32,11 +41,11 @@ Pinchy is the enterprise governance layer for the OpenClaw AI agent runtime. It 
 
 The platform targets IT leaders and CTOs at EU-regulated enterprises (50-500 employees) in financial services, healthcare, legal, and government sectors where data cannot leave company infrastructure. Cloud AI platforms (Dust, Glean, Copilot Studio) are eliminated by data sovereignty requirements. Workflow builders (n8n, Dify) lack autonomous agent governance. Agent frameworks (CrewAI, LangChain) are libraries without deployment, UI, or permissions. OpenClaw itself has no concept of teams, permissions, or audit.
 
-Pinchy does not replace OpenClaw -- it governs it. The platform operates as a WebSocket bridge between browser clients and the OpenClaw Gateway, intercepting every interaction to enforce permission checks and audit logging. A user goes from `docker compose up` to first agent conversation in under 10 minutes.
+Pinchy does not replace OpenClaw -- it governs it. The platform operates as a WebSocket bridge between browser clients and the OpenClaw Gateway, intercepting every interaction to enforce permission checks and audit logging. Multi-channel delivery is supported: agents are accessible via web UI and Telegram, with unified sessions across channels via identity links. A private Skills Hub enables admins to create and manage reusable prompt-based skills. A user goes from `docker compose up` to first agent conversation in under 10 minutes.
 
 ### What Makes This Special
 
-No competitor offers the combination of self-hosted + open-source (AGPL-3.0) + agent-level RBAC + cryptographic audit trail + model-agnostic deployment built on top of the most popular agent runtime.
+No competitor offers the combination of self-hosted + open-source (AGPL-3.0) + agent-level RBAC + cryptographic audit trail + multi-channel agent delivery (web + Telegram) + model-agnostic deployment built on top of the most popular agent runtime.
 
 The core differentiator is the allow-list permission model: agents start with zero tools and are explicitly granted specific capabilities by administrators. This aligns with the emerging zero-trust AI agent security standards (Microsoft ZT4AI, Cisco agent identity framework) that the industry is converging on. Safe tools (list/read approved directories) are separated from powerful tools (shell, write, web) -- the same tiered permission model recommended by the Cloud Security Alliance.
 
@@ -78,6 +87,8 @@ The HMAC-SHA256 signed audit trail provides cryptographic tamper evidence for ev
 - Agent permission enforcement: zero unauthorized tool executions (allow-list model verified by test suite)
 - Invite flow completion: token generation, email delivery, claim, account creation, personal agent seeding -- end-to-end verified by 16 test assertions
 - Audit log integrity verification: recompute HMACs for all rows and confirm zero mismatches
+- Telegram pairing flow completion: QR scan → pairing code → identity link created → cross-channel sessions active
+- Cross-channel session unification: web and Telegram conversations share same message history per agent-user pair
 
 ## Product Scope
 
@@ -87,7 +98,7 @@ The entire MVP is implemented and in production:
 
 - Setup wizard with admin creation and provider configuration
 - Email/password authentication with DB sessions
-- Provider configuration (Anthropic, OpenAI, Google) with encrypted API key storage
+- Provider configuration (Anthropic, OpenAI, Google, z.ai/Zhipu AI) with encrypted API key storage
 - Real-time agent chat via WebSocket bridge to OpenClaw
 - Agent permissions (allow-list tool model)
 - Knowledge Base agents with scoped read-only file access
@@ -96,6 +107,9 @@ The entire MVP is implemented and in production:
 - Smithers onboarding interview
 - Audit trail with HMAC-SHA256 signing
 - Usage tracking with cost estimation
+- Telegram channel integration (bot setup, agent binding, user pairing with QR codes, multi-bot support, cross-channel session unification via identity links)
+- Private Skills Hub (CRUD and management page)
+- Slash command autocomplete and quick-action popover in chat composer
 - Docker Compose deployment (3-service stack)
 
 ### Growth Features (Post-MVP)
@@ -103,6 +117,7 @@ The entire MVP is implemented and in production:
 - Granular RBAC (per-team, per-role permissions beyond admin/member)
 - SSO/SAML integration (enterprise procurement requirement)
 - Plugin marketplace (extending beyond pinchy-files and pinchy-context)
+- Additional channel integrations (Slack, email -- Telegram implemented, others planned)
 - Additional provider integrations (Groq, Ollama, custom OpenAI-compatible endpoints -- partially implemented)
 
 ### Vision (Future)
@@ -130,9 +145,9 @@ Maria provisions a Linux server, clones the Pinchy repository, and runs `docker 
 
 ### Journey 3: Knowledge Worker Using Agents (Daily Use)
 
-**Thomas opens the Pinchy web UI.** He sees his personal Smithers agent and three shared agents: "Company KB" (knowledge base), "Research Assistant" (custom), and "Code Helper" (custom). The Company KB agent has read-only access to `/data/company-docs/` via the pinchy-files plugin. Thomas asks the KB agent about the company's travel policy. The agent uses `pinchy_ls` to list files and `pinchy_read` to retrieve the relevant document. Responses stream in real-time via WebSocket. Token usage is recorded per session for cost tracking.
+**Thomas opens the Pinchy web UI.** He sees his personal Smithers agent and three shared agents: "Company KB" (knowledge base), "Research Assistant" (custom), and "Code Helper" (custom). The Company KB agent has read-only access to `/data/company-docs/` via the pinchy-files plugin. Thomas asks the KB agent about the company's travel policy. He types `/` in the chat composer and sees autocomplete suggestions for available slash commands. The agent uses `pinchy_ls` to list files and `pinchy_read` to retrieve the relevant document. Responses stream in real-time via WebSocket. Thomas can also message the same agent via Telegram -- sessions are unified across web and Telegram via identity links. Token usage is recorded per session for cost tracking.
 
-**Capabilities revealed:** Agent listing (personal + shared), knowledge base file access, streaming chat, tool execution, usage recording.
+**Capabilities revealed:** Agent listing (personal + shared), knowledge base file access, streaming chat, slash command autocomplete, tool execution, cross-channel session unification, usage recording.
 
 ### Journey 4: Admin Managing Agent Permissions (Governance)
 
@@ -146,23 +161,51 @@ Maria provisions a Linux server, clones the Pinchy repository, and runs `docker 
 
 **Capabilities revealed:** Audit log querying, event type filtering, HMAC integrity verification, CSV export.
 
+### Journey 6: Admin Configuring Telegram Channel (Channel Setup)
+
+**Maria wants her team to interact with agents via Telegram.** She navigates to Settings → Telegram. A guided setup flow walks her through creating a bot via BotFather (with step-by-step instructions). She pastes the bot token -- the system validates it via Telegram's `getMe` API before accepting. The bot username and display name are confirmed. Maria then opens Agent Settings → Channels for the "Company KB" agent and connects the Telegram bot. The system generates OpenClaw config with session bindings and channel configuration. The config file is written; OpenClaw's file watcher detects the change and hot-reloads. Maria can configure multiple bots for different agents (multi-bot support). Each connection/disconnection is logged to the audit trail.
+
+**Capabilities revealed:** BotFather-guided setup, bot token validation via getMe, agent-to-channel binding, OpenClaw config generation with file-based hot-reload, multi-bot management, audit logging for channel changes.
+
+### Journey 7: User Linking Telegram Account (Cross-Channel)
+
+**Thomas wants to message agents from Telegram.** He opens his Profile → Telegram settings. A QR code is displayed linking to the Pinchy Telegram bot. Thomas scans the QR code, opening a conversation with the bot in Telegram. The UI shows a 6-digit pairing code (10-minute TTL) and an example of what to send. Thomas sends the pairing code to the bot. Pinchy validates the code, creates an identity link in the `channelLinks` table mapping Thomas's Telegram user ID to his Pinchy account. The identity link is injected into OpenClaw config as `identityLinks`, enabling session unification. Thomas can now message any Telegram-connected agent and see the same conversation history as in the web UI. His Telegram user ID is added to the native allow-from store (atomic file write) so the bot accepts his messages.
+
+**Capabilities revealed:** QR code pairing flow, 6-digit pairing codes with TTL, identity link creation, cross-channel session unification via identityLinks, native allow-from store management, atomic credential file writes.
+
+### Journey 8: Managing and Using Skills (Skills Hub)
+
+**Maria wants to create reusable prompt-based skills for her team.** She opens the Skills Hub from the sidebar navigation. She creates a new skill called "Summarize Contract" with a description and a prompt template that instructs agents to extract key terms, obligations, and deadlines from legal documents. The skill is saved and immediately available. She creates two more skills: "Draft Email Reply" and "Translate to German."
+
+Thomas opens the Skills Hub and browses available skills. He finds "Summarize Contract" and reads its description. In a chat session with the Company KB agent, Thomas selects the skill -- the prompt is injected into his message. He pastes a contract excerpt and the agent produces a structured summary following the skill's template. Maria later edits the "Summarize Contract" skill to refine the prompt based on team feedback. She deletes the "Translate to German" skill that the team no longer uses.
+
+**Capabilities revealed:** Skill creation with name/description/content, skill browsing and discovery, skill invocation in chat, skill editing and deletion, Skills Hub management page.
+
 ### Journey Requirements Summary
 
 | Journey | Primary Capability Areas |
 |---------|------------------------|
 | Admin Setup | Setup wizard, provider config, admin creation, Smithers onboarding |
 | Team Onboarding | Invites, token management, user creation, group assignment |
-| Daily Agent Use | Agent chat, knowledge base, streaming, usage tracking |
+| Daily Agent Use | Agent chat, knowledge base, streaming, slash commands, cross-channel sessions, usage tracking |
 | Permission Management | Tool allow-list, visibility, groups, audit logging |
 | Compliance Review | Audit querying, integrity verification, CSV export |
+| Telegram Channel Setup | BotFather guided setup, bot validation, agent binding, multi-bot, config hot-reload |
+| Telegram Account Linking | QR code pairing, pairing codes, identity links, cross-channel session unification |
+| Skills Hub | Skill creation, browsing, invocation in chat, editing, deletion |
 
 ## Domain-Specific Requirements
 
 ### Compliance and Regulatory
 
-- **EU AI Act Article 19**: Audit trail retention for 6+ months. All AI agent actions must be traceable to a human actor.
-- **GDPR**: Data never leaves customer infrastructure (self-hosted). No cross-border data transfer concerns. Session data has defined expiry (7-day sessions with 1-day refresh window).
-- **Data sovereignty**: Full offline capability with local models via Ollama. No phone-home, no telemetry unless opt-in.
+- **EU AI Act Article 19(1)(d)**: Audit trail retention for 6+ months. All AI agent actions must be traceable to a human actor. Logging records must include timestamps, actor identification, and action descriptions per Article 19(1)(d) record-keeping requirements.
+- **GDPR Compliance**:
+  - **Article 17 (Right to erasure)**: User deactivation soft-deletes personal data; audit trail retains anonymized action records for compliance.
+  - **Article 25 (Data protection by design)**: Self-hosted architecture ensures data never leaves customer infrastructure. No cross-border data transfer. Encryption at rest for sensitive values.
+  - **Article 35 (DPIA)**: Platform design supports Data Protection Impact Assessments — all data processing is local, auditable, and under customer control.
+  - Session data has defined expiry (7-day sessions with 1-day refresh window). No phone-home, no telemetry unless opt-in.
+- **Data sovereignty**: Full offline capability with local models via Ollama. No external service dependencies after initial setup.
+- **SOC 2 / ISO 27001**: Not yet certified. Architecture designed to support future certification — encrypted storage, signed audit trail, role-based access, session management, and non-root container execution align with SOC 2 Trust Service Criteria and ISO 27001 Annex A controls.
 
 ### Technical Constraints
 
@@ -175,13 +218,17 @@ Maria provisions a Linux server, clones the Pinchy repository, and runs `docker 
 
 - **OpenClaw Gateway**: WebSocket bridge to OpenClaw runtime (single-port Gateway carrying HTTP + WebSocket on port 12345). Pinchy connects as a client, not a fork.
 - **OpenClaw Plugins**: Three custom plugins (pinchy-files, pinchy-context, pinchy-audit) communicate back to Pinchy via internal HTTP API (`/api/internal/*`) authenticated by gateway token.
-- **Provider APIs**: Anthropic, OpenAI, Google (Gemini) model listing and validation endpoints for API key verification and dynamic model discovery.
+- **OpenClaw Config Management**: File-based config generation (Pinchy writes `openclaw.json`, OpenClaw detects via file watcher and hot-reloads). Config write deduplication prevents unnecessary restarts. Startup config push closes the gap when OpenClaw starts before Pinchy writes config.
+- **OpenClaw Credential Store**: Native allow-from store (`telegram-allowFrom.json`) managed via atomic file writes for Telegram pairing without triggering config restarts.
+- **Telegram Bot API**: Bot token validation via `getMe` endpoint. Bot-to-agent channel bindings in OpenClaw config. Identity links for cross-channel session unification.
+- **Provider APIs**: Anthropic, OpenAI, Google (Gemini), z.ai (Zhipu AI) model listing and validation endpoints for API key verification and dynamic model discovery.
 
 ### Risk Mitigations
 
 - **OpenClaw upstream changes**: Pinchy wraps and extends, never forks. OpenClaw 3.0's agent pool architecture validates this approach.
 - **Enterprise feature degradation**: When enterprise license expires, restricted visibility gracefully degrades to "all" (agents become visible to everyone rather than breaking).
 - **Plugin retry logic**: 2 retries for audit POST to internal API. Usage recording is fire-and-forget (non-blocking chat).
+- **Telegram config stability**: Evolved from RPC-based `config.patch` to file-based config generation for reliability. Config hash conflict retry for concurrent updates. Debounced writes prevent rapid restart loops.
 
 ## Innovation and Novel Patterns
 
@@ -199,6 +246,7 @@ Maria provisions a Linux server, clones the Pinchy repository, and runs `docker 
 | Agent permissions | Allow-list (zero tools by default) | Copilot Studio has controls but is cloud-only |
 | Audit trail | HMAC-SHA256 signed, CSV export, integrity verification | Dust/StackAI have logs but are cloud-hosted |
 | Agent runtime | OpenClaw (247K stars, autonomous reasoning) | Dify/n8n use visual workflows, not agent loops |
+| Multi-channel | Web + Telegram with unified sessions via identity links | Competitors offer single-channel or require separate config |
 | Model support | Any provider or local models via Ollama | Copilot Studio / Gemini Enterprise are vendor-locked |
 | License | AGPL-3.0 (prevents proprietary cloud forks) | n8n fair-code, Dify open-source, others proprietary |
 
@@ -226,6 +274,7 @@ Pinchy is a self-hosted SaaS B2B platform deployed via Docker Compose. Unlike ty
 - **Plugin Architecture**: Three OpenClaw plugins run inside the OpenClaw container and communicate back to Pinchy via internal HTTP API (`/api/internal/*`).
 - **Migration-on-Startup**: Drizzle migrations run automatically via `server-preload.cjs` before the app starts. 20 migration files in production.
 - **Settings as Key-Value**: Application settings stored in `settings` table with optional AES-256-GCM encryption for sensitive values.
+- **Channel Architecture**: Telegram bots configured in settings, bound to agents via channel config. OpenClaw config generated with channels, session bindings, and identity links. File-based hot-reload (write JSON → file watcher → restart). Native credential store for allow-from (avoids config restarts for user pairing).
 
 ### Multi-Tenancy Model
 
@@ -249,6 +298,10 @@ Single-tenant deployment (one Docker Compose stack per organization). Multi-user
 | Configure providers | Yes | No |
 | Change user roles | Yes (with last-admin protection) | No |
 | Update own profile/password | Yes | Yes |
+| Configure Telegram bots | Yes | No |
+| Connect Telegram to agents | Yes | No |
+| Link own Telegram account | Yes | Yes |
+| Manage skills | Yes | Yes |
 
 ### Subscription and Licensing
 
@@ -331,12 +384,12 @@ Single-tenant deployment (one Docker Compose stack per organization). Multi-user
 
 ### Authentication and Sessions
 
-- **FR7**: Email/password authentication via Better Auth with admin and member roles
-  - AC: Better Auth catch-all route handles sign-up, sign-in, sign-out, session
+- **FR7**: Email/password authentication with admin and member roles
+  - AC: Authentication framework handles sign-up, sign-in, sign-out, session via catch-all route
 - **FR8**: DB-backed sessions with 7-day expiry and 1-day refresh window
   - AC: Session stored in `session` table with `expires_at`; refresh within window extends session
-- **FR9**: Scrypt password hashing with bcrypt legacy migration support
-  - AC: New passwords hashed with scrypt; existing bcrypt passwords verified and migrated on login
+- **FR9**: Secure password hashing with legacy hash migration support
+  - AC: New passwords use current hashing algorithm; existing legacy-hashed passwords verified and migrated transparently on login
 - **FR10**: Login/logout events logged to audit trail (auth.login, auth.failed, auth.logout)
   - AC: `appendAuditLog` called with correct event type for each auth event
 - **FR11**: Password change (self-service) via `PATCH /api/users/me/password`
@@ -348,8 +401,8 @@ Single-tenant deployment (one Docker Compose stack per organization). Multi-user
 
 - **FR13**: Invite-based user onboarding with 7-day token TTL
   - AC: Returns 400 for missing token/password/name; returns 410 for expired/invalid/claimed tokens; returns 201 and creates user on success
-- **FR14**: Invite tokens: 32 random bytes (hex), SHA256 hashed for DB storage
-  - AC: Raw token returned to admin; only hash stored in `invites.token_hash`
+- **FR14**: Invite tokens: cryptographically secure random tokens, hashed before DB storage
+  - AC: Raw token returned to admin; only hash stored in database
 - **FR15**: Admin can generate password reset tokens using the same invite flow with type "reset"
   - AC: Reset type does not create personal agent; updates existing user's password; returns 404 for unknown user
 - **FR16**: List all users with group memberships (admin only)
@@ -383,8 +436,8 @@ Single-tenant deployment (one Docker Compose stack per organization). Multi-user
   - AC: Admins access all agents; members access personal + visible shared only
 - **FR29**: Agent personality presets (butler, professor, etc.) with greeting messages
   - AC: Preset sets `greetingMessage` and `avatarSeed`; writes SOUL.md from preset content
-- **FR30**: Agent avatar generation from seed via DiceBear
-  - AC: `generateAvatarSeed` called during agent creation; seed stored in `avatar_seed` column
+- **FR30**: Procedural agent avatar generation from seed
+  - AC: Avatar seed generated during agent creation; seed stored for deterministic avatar rendering
 - **FR31**: Agent greeting message and tagline
   - AC: Uses tagline from request body when provided; falls back to template `defaultTagline`
 - **FR32**: Dynamic AGENTS.md generation with allowed_paths for knowledge base agents
@@ -429,18 +482,18 @@ Single-tenant deployment (one Docker Compose stack per organization). Multi-user
 - **FR47**: Extra system prompt injection (user name + user context + agent greeting)
   - AC: USER.md contains user context; IDENTITY.md contains agent identity; injected into OpenClaw session
 - **FR48**: Streaming response chunks from OpenClaw to browser
-  - AC: Server sends `{type: "token", content: "..."}` messages; stream ends with `{type: "done", usage: {...}}`
+  - AC: Server sends incremental content chunks to client; stream ends with completion signal including usage data
 - **FR49**: Message history fetch from OpenClaw sessions
   - AC: Server sends `{type: "history", messages: [...]}` on reconnect
-- **FR50**: Session key format: `agent:{agentId}:user-{userId}`
-  - AC: Unique session per agent-user pair; persists across reconnections
+- **FR50**: Unique session per agent-user pair
+  - AC: Each agent-user combination has a dedicated persistent session; sessions persist across reconnections
 - **FR51**: First-visit detection with greeting fallback
   - AC: If no message history exists, greeting message from agent config is displayed
 
 ### Provider and Model Configuration
 
-- **FR52**: Multi-provider support: Anthropic, OpenAI, Google (Gemini)
-  - AC: Provider type stored in settings; API key encrypted with AES-256-GCM
+- **FR52**: Multi-provider support: Anthropic, OpenAI, Google (Gemini), z.ai (Zhipu AI)
+  - AC: Provider type stored in settings; API key encrypted with AES-256-GCM; z.ai uses Zhipu AI models endpoint for validation
 - **FR53**: API key validation by calling provider's models endpoint
   - AC: Invalid key rejected before storage; provider-specific endpoint called
 - **FR54**: Dynamic model list fetching with 1-hour cache
@@ -467,6 +520,55 @@ Single-tenant deployment (one Docker Compose stack per organization). Multi-user
   - AC: Usage record created with `user_id`, `agent_id`, `agent_name` (snapshot), `session_key`, `model`, token counts, `estimated_cost_usd`
 - **FR62**: Usage dashboards: by-agent summary, by-user, timeseries, CSV/JSON export
   - AC: `GET /api/usage/summary` returns aggregated per-agent data; supports `?days=7|30|0|all` and `?agentId=` filters; returns 401 for unauthenticated; returns 403 for non-admin; returns 400 for invalid days; returns empty array when no data
+
+### Telegram Channel Configuration (Admin)
+
+- **FR63**: Admin configures Telegram bot token via guided BotFather setup flow at `POST /api/settings/telegram`
+  - AC: Bot token validated via Telegram `getMe` API before accepting; stores bot username, display name; rejects invalid tokens with descriptive error; audit log records `settings.telegram_configured`
+- **FR64**: List all configured Telegram bots via `GET /api/settings/telegram/bots`
+  - AC: Returns 401 for unauthenticated; returns 403 for non-admin; returns array of `{botToken, botUsername, botDisplayName}`
+- **FR65**: Global Telegram configuration status via `GET /api/settings/telegram/all`
+  - AC: Returns combined bot config + agent channel bindings + linked user count; admin only
+
+### Telegram Agent Channels
+
+- **FR66**: Connect Telegram bot to agent via `PUT /api/agents/{agentId}/channels/telegram`
+  - AC: Admin only; validates bot token exists in settings; generates OpenClaw config with channel and session bindings; writes config file (OpenClaw hot-reloads via file watcher); audit log records `channel.configured` with agent and bot details
+- **FR67**: Disconnect Telegram bot from agent via `DELETE /api/agents/{agentId}/channels/telegram`
+  - AC: Admin only; removes channel config from OpenClaw config; removes session bindings; audit log records `channel.deleted` with agent name
+- **FR68**: Agent-to-channel session bindings generated in OpenClaw config
+  - AC: Binding format maps agent ID to Telegram channel; enables OpenClaw to route Telegram messages to correct agent
+
+### Telegram User Account Linking
+
+- **FR69**: Pairing code generation for Telegram account linking (6-digit code, 10-minute TTL)
+  - AC: Code generated per user request; stored with expiry; single-use (consumed on successful pairing)
+- **FR70**: User links Telegram account by sending pairing code to bot
+  - AC: QR code displayed in Profile → Telegram settings linking to bot; user sends code in Telegram; system validates code and creates identity link
+- **FR71**: Identity links stored in `channelLinks` table, injected into OpenClaw config as `identityLinks`
+  - AC: Maps Telegram user ID to Pinchy user ID; enables cross-channel session unification (web and Telegram share same agent sessions)
+- **FR72**: Telegram allow-from managed via native OpenClaw credential store
+  - AC: Paired user's Telegram ID added to `telegram-allowFrom.json` via atomic file write (temp + rename); unpaired user removed; no config restart triggered
+
+### Skills Hub
+
+- **FR73**: Create private skills via `POST /api/skills`
+  - AC: Returns 401 for unauthenticated; stores skill with name, description, content; returns created skill with ID
+- **FR74**: List skills via `GET /api/skills`
+  - AC: Returns all skills accessible to current user
+- **FR75**: Read/update/delete individual skill via `/api/skills/[id]` (GET/PUT/DELETE)
+  - AC: Standard REST CRUD; returns 404 for unknown ID; returns 403 for unauthorized access
+- **FR76**: Skills management page with UI for browsing, creating, editing, and deleting skills
+  - AC: Accessible from sidebar navigation; supports full CRUD operations
+
+### Chat UI Enhancements
+
+- **FR77**: Slash command autocomplete in chat composer
+  - AC: Typing `/` triggers autocomplete popup with available commands; selection inserts command text
+- **FR78**: Popover menu with quick actions on + button in chat input
+  - AC: Clicking + button opens popover with contextual actions
+- **FR79**: "Connecting..." status indicator during initial WebSocket handshake
+  - AC: Displayed when WebSocket connection is being established; replaced by chat UI once connected
 
 ## Non-Functional Requirements
 
@@ -522,6 +624,17 @@ Single-tenant deployment (one Docker Compose stack per organization). Multi-user
 - **NFR20**: Model-agnostic (Anthropic, OpenAI, Google, local models)
   - AC: Provider abstraction layer supports multiple backends; new providers addable without core changes
 
+### OpenClaw Integration Reliability
+
+- **NFR23**: File-based config hot-reload (Pinchy writes config, OpenClaw detects changes and restarts)
+  - AC: Config changes applied without manual restart; file watcher detects config file modifications automatically
+- **NFR24**: Config write deduplication (skip write if content unchanged)
+  - AC: `regenerateOpenClawConfig` compares new config with existing file; skips write when identical; prevents unnecessary OpenClaw restarts
+- **NFR25**: Atomic credential store writes for Telegram allow-from
+  - AC: Credential file writes are atomic (no partial reads possible); allow-from store always contains valid data
+- **NFR26**: Startup config push (closes gap when OpenClaw starts before Pinchy writes config)
+  - AC: Full config pushed to OpenClaw on first connection if file-based config was not yet written; ensures OpenClaw always has current configuration
+
 ### Developer Experience
 
 - **NFR21**: TDD mandatory -- failing test first, then implementation
@@ -531,4 +644,4 @@ Single-tenant deployment (one Docker Compose stack per organization). Multi-user
 
 ---
 
-*Reverse-engineered from production codebase. All FRs are facts extracted from implemented code. Acceptance Criteria derived from test assertions across 167 test files.*
+*Reverse-engineered from production codebase and updated from `sha/reverse` branch (54 commits). FR1-FR62 extracted from main branch code. FR63-FR79 added from branch commits and code analysis. FR80 (session migration) reclassified as migration task and removed from FRs. Acceptance Criteria derived from test assertions and API route implementations. Post-validation edits applied: Journey 8 added, implementation leakage cleaned, domain compliance references strengthened.*
