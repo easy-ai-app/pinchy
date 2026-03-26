@@ -1121,6 +1121,54 @@ describe("useWsRuntime", () => {
     });
   });
 
+  describe("hasConnectedOnce", () => {
+    it("should return hasConnectedOnce as false initially", () => {
+      const { result } = renderHook(() => useWsRuntime("agent-1"));
+      expect(result.current.hasConnectedOnce).toBe(false);
+    });
+
+    it("should set hasConnectedOnce to true after first connection", () => {
+      const { result } = renderHook(() => useWsRuntime("agent-1"));
+      const ws = wsInstances[0];
+
+      act(() => {
+        ws.onopen?.();
+      });
+
+      expect(result.current.hasConnectedOnce).toBe(true);
+    });
+
+    it("should keep hasConnectedOnce true after disconnect", () => {
+      const { result } = renderHook(() => useWsRuntime("agent-1"));
+      const ws = wsInstances[0];
+
+      act(() => {
+        ws.onopen?.();
+      });
+      expect(result.current.hasConnectedOnce).toBe(true);
+
+      act(() => {
+        ws.onclose?.();
+      });
+      expect(result.current.hasConnectedOnce).toBe(true);
+    });
+
+    it("should reset hasConnectedOnce when agentId changes", () => {
+      const { result, rerender } = renderHook(({ agentId }) => useWsRuntime(agentId), {
+        initialProps: { agentId: "agent-1" },
+      });
+      const ws1 = wsInstances[0];
+
+      act(() => {
+        ws1.onopen?.();
+      });
+      expect(result.current.hasConnectedOnce).toBe(true);
+
+      rerender({ agentId: "agent-2" });
+      expect(result.current.hasConnectedOnce).toBe(false);
+    });
+  });
+
   describe("agent switching", () => {
     it("should reset messages when agentId changes", () => {
       const { result, rerender } = renderHook(({ agentId }) => useWsRuntime(agentId), {

@@ -61,11 +61,13 @@ export function useWsRuntime(agentId: string): {
   isConnected: boolean;
   isDelayed: boolean;
   isHistoryLoaded: boolean;
+  hasConnectedOnce: boolean;
 } {
   const { triggerRestart } = useRestart();
   const [messages, setMessages] = useState<WsMessage[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [hasConnectedOnce, setHasConnectedOnce] = useState(false);
   const [isDelayed, setIsDelayed] = useState(false);
   const [isHistoryLoaded, setIsHistoryLoaded] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -85,6 +87,7 @@ export function useWsRuntime(agentId: string): {
     setPrevAgentId(agentId);
     setMessages([]);
     setIsRunning(false);
+    setHasConnectedOnce(false);
     setIsDelayed(false);
     setIsHistoryLoaded(false);
   }
@@ -100,6 +103,7 @@ export function useWsRuntime(agentId: string): {
 
       ws.onopen = () => {
         setIsConnected(true);
+        setHasConnectedOnce(true);
         reconnectAttemptRef.current = 0;
         ws.send(JSON.stringify({ type: "history", agentId }));
 
@@ -362,5 +366,5 @@ export function useWsRuntime(agentId: string): {
     },
   });
 
-  return { runtime, isConnected, isDelayed, isHistoryLoaded };
+  return { runtime, isConnected, isDelayed, isHistoryLoaded, hasConnectedOnce };
 }
