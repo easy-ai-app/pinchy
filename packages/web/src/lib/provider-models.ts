@@ -39,6 +39,12 @@ const FALLBACK_MODELS: Record<ProviderName, ModelInfo[]> = {
     { id: "google/gemini-2.5-flash", name: "Gemini 2.5 Flash" },
     { id: "google/gemini-2.5-pro", name: "Gemini 2.5 Pro" },
   ],
+  zai: [
+    { id: "zai/glm-5", name: "GLM-5" },
+    { id: "zai/glm-4.7", name: "GLM-4.7" },
+    { id: "zai/glm-4.6", name: "GLM-4.6" },
+    { id: "zai/glm-4.5-air", name: "GLM-4.5 Air" },
+  ],
 };
 
 interface ProviderFetchConfig {
@@ -84,6 +90,15 @@ const PROVIDER_FETCH_CONFIG: Record<ProviderName, ProviderFetchConfig> = {
           name: m.displayName,
         })),
   },
+  zai: {
+    url: () => "https://api.z.ai/api/paas/v4/models",
+    headers: (apiKey) => ({ Authorization: `Bearer ${apiKey}` }),
+    transform: (data) =>
+      (data.data as { id: string }[]).map((m) => ({
+        id: `zai/${m.id}`,
+        name: m.id,
+      })),
+  },
 };
 
 async function fetchModelsForProvider(
@@ -107,6 +122,7 @@ const DEFAULT_MODEL_PATTERNS: Record<ProviderName, RegExp> = {
   anthropic: /haiku/,
   openai: /gpt-.*-mini/,
   google: /gemini-.*-flash/,
+  zai: /glm-.*-air/,
 };
 
 const PREVIEW_PATTERN = /preview/i;
