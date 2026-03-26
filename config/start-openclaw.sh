@@ -60,38 +60,42 @@ auto_approve_devices() {
     while true; do
         openclaw devices approve --latest \
             --url ws://127.0.0.1:18789 \
-            --token "$token" 2>/dev/null || true
-        sleep 3
+            --token "$token" >/dev/null 2>&1 || true
+        sleep 5
     done
 }
 
+install_plugin_deps
+scan_data_directories
+
+# OpenClaw rewrites openclaw.json on startup with root-only permissions.
+# Wait briefly, then fix permissions so Pinchy can write to it.
+(sleep 3 && fix_config_permissions) &
+
+# Start auto-approver in the background (needed for Docker networking
+# where connections come from container IPs, not localhost)
+auto_approve_devices &
+
+# Start gateway. The `openclaw gateway` command daemonizes — it spawns the
+# actual gateway process and exits immediately. In a container there's no
+# systemd, so we supervise via a health-check loop instead of `wait`.
+echo "Starting OpenClaw Gateway..."
+openclaw gateway --port 18789 || true
+
+# Keep the container alive. Health-check restarts gateway if it crashes.
+# Double-check with a delay to avoid interfering with OpenClaw's internal
+# SIGUSR1 restarts (port is briefly unavailable during restart).
 while true; do
-    install_plugin_deps
-    scan_data_directories
-    openclaw gateway --port 18789 &
-    PID=$!
-    echo "OpenClaw Gateway running (pid: $PID)"
-
-    # OpenClaw rewrites openclaw.json on startup with root-only permissions.
-    # Wait briefly, then fix permissions so Pinchy can write to it.
-    (sleep 3 && fix_config_permissions) &
-
-    # Start auto-approver in the background
-    auto_approve_devices &
-    APPROVE_PID=$!
-
-    # Wait for config change or process exit.
-    # Grace period: OpenClaw rewrites openclaw.json on startup ("Config overwrite"),
-    # which would immediately trigger inotifywait and cause a needless restart.
-    (sleep 10 && inotifywait -q -e modify /root/.openclaw/openclaw.json) &
-    WATCH_PID=$!
-
-    # Wait for either to finish
-    wait -n "$PID" "$WATCH_PID" 2>/dev/null || true
-
-    echo "Restarting OpenClaw Gateway..."
-    kill "$PID" "$WATCH_PID" "$APPROVE_PID" 2>/dev/null || true
-    wait "$PID" "$WATCH_PID" "$APPROVE_PID" 2>/dev/null || true
-
-    sleep 1
+    sleep 30
+    if ! (echo > /dev/tcp/127.0.0.1/18789) 2>/dev/null; then
+        # Port is down — wait 10s and check again (internal restart takes ~5s)
+        sleep 10
+        if ! (echo > /dev/tcp/127.0.0.1/18789) 2>/dev/null; then
+            echo "OpenClaw Gateway stopped (port 18789 not responding after 10s), restarting..."
+            fix_config_permissions
+            install_plugin_deps
+            scan_data_directories
+            openclaw gateway --port 18789 || true
+        fi
+    fi
 done
