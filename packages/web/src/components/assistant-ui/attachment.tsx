@@ -1,17 +1,28 @@
 "use client";
 
 import { PropsWithChildren, useEffect, useState, type FC } from "react";
-import { XIcon, PlusIcon, FileText } from "lucide-react";
+import {
+  XIcon,
+  PlusIcon,
+  FileText,
+  PaperclipIcon,
+  SparklesIcon,
+  LanguagesIcon,
+  BookOpenIcon,
+  ZapIcon,
+} from "lucide-react";
 import {
   AttachmentPrimitive,
   ComposerPrimitive,
   MessagePrimitive,
   useAuiState,
   useAui,
+  useComposerRuntime,
 } from "@assistant-ui/react";
 import { useShallow } from "zustand/shallow";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogTitle, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { cn } from "@/lib/utils";
@@ -193,19 +204,111 @@ export const ComposerAttachments: FC = () => {
   );
 };
 
-export const ComposerAddAttachment: FC = () => {
+const ATTACH_ACCEPT =
+  "image/*,text/plain,text/html,text/markdown,text/csv,text/xml,text/json,text/css,application/javascript,application/typescript,.js,.ts,.tsx,.jsx,.py,.rs,.go,.sh,.sql,.yaml,.yml,.toml,.json";
+
+const menuItemClass =
+  "flex w-full cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground";
+
+const SkillsMenuSection: FC<{ onSelect: (prompt: string) => void }> = ({ onSelect }) => {
+  const [skills, setSkills] = useState<
+    { id: string; name: string; prompt: string; icon: string | null }[]
+  >([]);
+
+  useEffect(() => {
+    fetch("/api/skills")
+      .then((res) => (res.ok ? res.json() : []))
+      .then(setSkills)
+      .catch(() => {});
+  }, []);
+
+  if (skills.length === 0) return null;
+
   return (
-    <ComposerPrimitive.AddAttachment asChild>
-      <TooltipIconButton
-        tooltip="Add Attachment"
-        side="bottom"
-        variant="ghost"
-        size="icon"
-        className="aui-composer-add-attachment size-8.5 rounded-full p-1 font-semibold text-xs hover:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30"
-        aria-label="Add Attachment"
-      >
-        <PlusIcon className="aui-attachment-add-icon size-5 stroke-[1.5px]" />
-      </TooltipIconButton>
-    </ComposerPrimitive.AddAttachment>
+    <>
+      <div className="my-1 h-px bg-border" />
+      <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Skills</div>
+      {skills.map((skill) => (
+        <button key={skill.id} onClick={() => onSelect(skill.prompt)} className={menuItemClass}>
+          <ZapIcon className="size-4" />
+          {skill.name}
+        </button>
+      ))}
+    </>
+  );
+};
+
+export const ComposerAddAttachment: FC = () => {
+  const [open, setOpen] = useState(false);
+  const composerRuntime = useComposerRuntime();
+
+  const insertPrompt = (text: string) => {
+    composerRuntime.setText(text);
+    setOpen(false);
+  };
+
+  const handleAttachFile = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.multiple = true;
+    input.accept = ATTACH_ACCEPT;
+    input.onchange = (e) => {
+      const files = (e.target as HTMLInputElement).files;
+      if (files) {
+        Array.from(files).forEach((file) => composerRuntime.addAttachment(file));
+      }
+    };
+    input.click();
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <TooltipIconButton
+          tooltip="Actions"
+          side="bottom"
+          variant="ghost"
+          size="icon"
+          className="aui-composer-add-attachment size-8.5 rounded-full p-1 font-semibold text-xs hover:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30"
+          aria-label="Actions"
+        >
+          <PlusIcon className="aui-attachment-add-icon size-5 stroke-[1.5px]" />
+        </TooltipIconButton>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="start" className="w-56 p-1">
+        <button onClick={handleAttachFile} className={menuItemClass}>
+          <PaperclipIcon className="size-4" />
+          Attach file
+        </button>
+
+        <div className="my-1 h-px bg-border" />
+
+        <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Quick Actions</div>
+        <button
+          onClick={() => insertPrompt("Please summarize the above conversation.")}
+          className={menuItemClass}
+        >
+          <SparklesIcon className="size-4" />
+          Summarize
+        </button>
+        <button
+          onClick={() => insertPrompt("Please translate the above to: ")}
+          className={menuItemClass}
+        >
+          <LanguagesIcon className="size-4" />
+          Translate
+        </button>
+        <button
+          onClick={() => insertPrompt("Please explain the above in simple terms.")}
+          className={menuItemClass}
+        >
+          <BookOpenIcon className="size-4" />
+          Explain
+        </button>
+
+        <SkillsMenuSection onSelect={(prompt) => insertPrompt(prompt)} />
+      </PopoverContent>
+    </Popover>
   );
 };
