@@ -1,7 +1,7 @@
 import type { ProviderName } from "@/lib/providers";
 
 // Providers where all current chat models support vision
-export const VISION_CAPABLE_PROVIDERS: ProviderName[] = ["anthropic", "openai", "google"];
+export const VISION_CAPABLE_PROVIDERS: ProviderName[] = ["anthropic", "openai", "google", "zai"];
 
 // Known vision-capable Ollama model prefixes
 const VISION_OLLAMA_MODELS = [

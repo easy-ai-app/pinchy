@@ -1,4 +1,4 @@
-export type ProviderName = "anthropic" | "openai" | "google";
+export type ProviderName = "anthropic" | "openai" | "google" | "zai";
 
 interface ProviderConfig {
   name: string;
@@ -30,6 +30,13 @@ export const PROVIDERS: Record<ProviderName, ProviderConfig> = {
     defaultModel: "google/gemini-2.5-flash",
     placeholder: "AIza...",
   },
+  zai: {
+    name: "Z.ai",
+    settingsKey: "zai_api_key",
+    envVar: "ZAI_API_KEY",
+    defaultModel: "zai/glm-4.5-air",
+    placeholder: "sk-...",
+  },
 };
 
 export type ValidationResult =
@@ -55,6 +62,12 @@ function makeValidationRequest(provider: ProviderName, apiKey: string): Promise<
       });
     case "google":
       return fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`, {});
+    case "zai":
+      return fetch("https://api.z.ai/api/paas/v4/models", {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+      });
   }
 }
 
