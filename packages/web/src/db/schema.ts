@@ -248,6 +248,29 @@ export const usageRecords = pgTable(
   ]
 );
 
+// ── Skills ───────────────────────────────────────────────────────────
+
+export const skills = pgTable(
+  "skills",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: text("name").notNull(),
+    description: text("description"),
+    prompt: text("prompt").notNull(),
+    icon: text("icon"),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    isShared: boolean("is_shared").notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [index("skills_user_id_idx").on(table.userId)]
+);
+
 // ── Views ────────────────────────────────────────────────────────────
 
 export const activeAgents = pgView("active_agents").as((qb) =>
