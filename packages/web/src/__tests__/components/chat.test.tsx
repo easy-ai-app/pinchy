@@ -29,6 +29,7 @@ vi.mock("@/hooks/use-ws-runtime", () => ({
     isConnected: true,
     isDelayed: false,
     isHistoryLoaded: true,
+    hasConnectedOnce: true,
   }),
 }));
 
@@ -79,6 +80,7 @@ describe("Chat", () => {
       isConnected: true,
       isDelayed: false,
       isHistoryLoaded: true,
+      hasConnectedOnce: true,
     });
   });
 
@@ -88,6 +90,7 @@ describe("Chat", () => {
       isConnected: true,
       isDelayed: false,
       isHistoryLoaded: true,
+      hasConnectedOnce: true,
     });
 
     render(<Chat agentId="agent-1" agentName="Smithers" />);
@@ -101,6 +104,7 @@ describe("Chat", () => {
       isConnected: true,
       isDelayed: false,
       isHistoryLoaded: false,
+      hasConnectedOnce: true,
     });
 
     render(<Chat agentId="agent-1" agentName="Smithers" />);
@@ -126,12 +130,13 @@ describe("Chat", () => {
     expect(screen.getByTestId("thread")).toBeInTheDocument();
   });
 
-  it("should show disconnected status indicator when WebSocket is not connected", () => {
+  it("should show disconnected status indicator when WebSocket disconnects after prior connection", () => {
     vi.mocked(useWsRuntime).mockReturnValue({
       runtime: {} as any,
       isConnected: false,
       isDelayed: false,
       isHistoryLoaded: false,
+      hasConnectedOnce: true,
     });
 
     render(<Chat agentId="agent-1" agentName="Smithers" />);
@@ -140,12 +145,28 @@ describe("Chat", () => {
     expect(dot.className).toContain("bg-destructive");
   });
 
+  it("should show connecting status indicator before first connection", () => {
+    vi.mocked(useWsRuntime).mockReturnValue({
+      runtime: {} as any,
+      isConnected: false,
+      isDelayed: false,
+      isHistoryLoaded: false,
+      hasConnectedOnce: false,
+    });
+
+    render(<Chat agentId="agent-1" agentName="Smithers" />);
+    const dot = screen.getByLabelText("Connecting...");
+    expect(dot).toBeInTheDocument();
+    expect(dot.className).toContain("bg-amber-500");
+  });
+
   it("should show 'Applying your changes' in status tooltip when configuring", () => {
     vi.mocked(useWsRuntime).mockReturnValue({
       runtime: {} as any,
       isConnected: false,
       isDelayed: false,
       isHistoryLoaded: false,
+      hasConnectedOnce: true,
     });
 
     render(<Chat agentId="agent-1" agentName="Smithers" configuring={true} />);
@@ -198,6 +219,7 @@ describe("Chat", () => {
       isConnected: true,
       isDelayed: true,
       isHistoryLoaded: true,
+      hasConnectedOnce: true,
     });
 
     render(<Chat agentId="agent-1" agentName="Smithers" />);

@@ -40,15 +40,22 @@ export function Chat({
     : avatarUrl;
   const displayIsPersonal = liveAgent?.isPersonal ?? isPersonal;
 
-  const { runtime, isConnected, isDelayed, isHistoryLoaded } = useWsRuntime(agentId);
+  const { runtime, isConnected, isDelayed, isHistoryLoaded, hasConnectedOnce } =
+    useWsRuntime(agentId);
 
   const statusMessage = !isConnected
     ? configuring
       ? "Applying your changes \u2014 this takes a moment..."
-      : "Disconnected"
+      : hasConnectedOnce
+        ? "Disconnected"
+        : "Connecting..."
     : "Connected";
 
-  const statusColor = isConnected ? "text-green-600" : "text-destructive";
+  const statusDotColor = isConnected
+    ? "bg-green-600"
+    : !hasConnectedOnce && !configuring
+      ? "bg-amber-500"
+      : "bg-destructive";
 
   return (
     <AgentIdContext.Provider value={agentId}>
@@ -97,7 +104,7 @@ export function Chat({
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span
-                        className={`size-2 rounded-full shrink-0 ${isConnected ? "bg-green-600" : "bg-destructive"}`}
+                        className={`size-2 rounded-full shrink-0 ${statusDotColor}`}
                         aria-label={statusMessage}
                       />
                     </TooltipTrigger>

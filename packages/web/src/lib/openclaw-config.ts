@@ -4,7 +4,7 @@ import { dirname } from "path";
 import { PROVIDERS, type ProviderName } from "@/lib/providers";
 import { getDefaultModel } from "@/lib/provider-models";
 import { db } from "@/db";
-import { agents } from "@/db/schema";
+import { agents, channelLinks } from "@/db/schema";
 import { getSetting } from "@/lib/settings";
 import { computeDeniedGroups } from "@/lib/tool-registry";
 import { getOpenClawWorkspacePath } from "@/lib/workspace";
@@ -215,13 +215,49 @@ export async function regenerateOpenClawConfig() {
 
   // Note: pinchy-files is only included when agents use it (via pluginConfigs loop above).
 
-  // Set plugins.allow to only the enabled plugin IDs. This prevents OpenClaw from
-  // auto-discovering unused plugins from the extensions directory, which would cause
-  // either a restart loop (invalid config) or "disabled but config present" warning spam.
-  const allowedPlugins = Object.keys(entries);
+  // Merge our plugin IDs into the existing allow list. OpenClaw adds its own
+  // plugins (e.g. "telegram") to plugins.allow — if we overwrite the list,
+  // OpenClaw sees a diff and triggers a full gateway restart every time.
+  const existingAllow = ((existing.plugins as Record<string, unknown>)?.allow as string[]) || [];
+  const ourPlugins = Object.keys(entries);
+  const allowedPlugins = [...new Set([...existingAllow, ...ourPlugins])];
 
-  if (Object.keys(entries).length > 0) {
+  if (allowedPlugins.length > 0 || Object.keys(entries).length > 0) {
     config.plugins = { allow: allowedPlugins, entries };
+  }
+
+  // Build Telegram channel config from DB settings
+  // For now: single bot token (first configured agent wins).
+  // Multi-bot via OpenClaw accounts is a future enhancement.
+  //
+  // NOTE: allowFrom is NOT written here. It's managed via OpenClaw's native
+  // allow-from store (credentials/telegram-allowFrom.json) to avoid triggering
+  // the broken channel restart (openclaw/openclaw#47458).
+  for (const agent of allAgents) {
+    const botToken = await getSetting(`telegram_bot_token:${agent.id}`);
+    if (botToken) {
+      const links = await db.select().from(channelLinks);
+      const identityLinks: Record<string, string[]> = {};
+      for (const link of links) {
+        if (link.channel === "telegram") {
+          identityLinks[link.userId] = [`telegram:${link.channelUserId}`];
+        }
+      }
+
+      config.channels = {
+        telegram: {
+          enabled: true,
+          botToken,
+          dmPolicy: "pairing",
+        },
+      };
+      config.bindings = [{ agentId: agent.id, match: { channel: "telegram" } }];
+      config.session = {
+        dmScope: "per-peer",
+        ...(Object.keys(identityLinks).length > 0 && { identityLinks }),
+      };
+      break;
+    }
   }
 
   const dir = dirname(CONFIG_PATH);
@@ -229,6 +265,90 @@ export async function regenerateOpenClawConfig() {
     mkdirSync(dir, { recursive: true });
   }
 
-  writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), { encoding: "utf-8", mode: 0o644 });
-  restartState.notifyRestart();
+  // Only write if content actually changed — prevents unnecessary OpenClaw restarts
+  const newContent = JSON.stringify(config, null, 2);
+  try {
+    const existing = readFileSync(CONFIG_PATH, "utf-8");
+    if (existing === newContent) return;
+  } catch {
+    // File doesn't exist yet — write it
+  }
+
+  writeFileSync(CONFIG_PATH, newContent, { encoding: "utf-8", mode: 0o644 });
+}
+
+// ── Types for config patch helpers ────────────────────────────────────────
+
+type PatchResult = { applied: true } | { applied: false; error: string };
+
+interface ConfigClient {
+  config: {
+    get: () => Promise<Record<string, unknown>>;
+    patch: (raw: string, baseHash: string) => Promise<unknown>;
+  };
+}
+
+// ── pushStartupConfig ────────────────────────────────────────────────────
+
+/**
+ * Read the config file and push it to OpenClaw via config.patch.
+ *
+ * Called once on first WebSocket connect to close the startup gap: if OpenClaw
+ * started before Pinchy wrote the config, it has an outdated version. This
+ * pushes the full config as a patch so channels, bindings, and session are
+ * applied without requiring a manual restart.
+ */
+export async function pushStartupConfig(client: ConfigClient): Promise<PatchResult> {
+  try {
+    const config = JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
+    return applyConfigPatch(client, config);
+  } catch (err) {
+    return { applied: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ── applyConfigPatch ─────────────────────────────────────────────────────
+
+/**
+ * Apply a config.patch to OpenClaw with hash-conflict retry.
+ *
+ * - Timeout/disconnect is treated as success (OpenClaw restarts after applying channel changes)
+ * - Hash conflicts retry once (another config change may have raced)
+ * - Other failures return { applied: false } — the change is safe in DB
+ *   and will be picked up on next restart via regenerateOpenClawConfig
+ */
+export async function applyConfigPatch(
+  client: ConfigClient,
+  patchData: Record<string, unknown>
+): Promise<PatchResult> {
+  const raw = JSON.stringify(patchData);
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const configResult = await client.config.get();
+      const hash = configResult.hash as string;
+      await client.config.patch(raw, hash);
+      return { applied: true };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      // Timeout/disconnect = OpenClaw restarted after applying the patch
+      if (
+        message.includes("timed out") ||
+        message.includes("disconnect") ||
+        message.includes("closed")
+      ) {
+        return { applied: true };
+      }
+
+      // Hash conflict = another config change raced. Retry once.
+      if (message.includes("hash") && attempt === 0) {
+        continue;
+      }
+
+      return { applied: false, error: message };
+    }
+  }
+
+  return { applied: false, error: "hash_mismatch" };
 }

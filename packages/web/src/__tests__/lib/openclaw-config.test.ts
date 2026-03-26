@@ -741,11 +741,270 @@ describe("restart-state integration", () => {
     expect(restartState.notifyRestart).toHaveBeenCalledOnce();
   });
 
-  it("regenerateOpenClawConfig calls restartState.notifyRestart", async () => {
+  it("regenerateOpenClawConfig does not call restartState.notifyRestart (OpenClaw detects file changes)", async () => {
     const { restartState } = await import("@/server/restart-state");
 
     await regenerateOpenClawConfig();
 
-    expect(restartState.notifyRestart).toHaveBeenCalledOnce();
+    expect(restartState.notifyRestart).not.toHaveBeenCalled();
+  });
+
+  it("should skip writing and not restart when config content is unchanged", async () => {
+    const { restartState } = await import("@/server/restart-state");
+
+    // First call writes the config
+    await regenerateOpenClawConfig();
+    const firstWrite = mockedWriteFileSync.mock.calls[0][1] as string;
+
+    vi.clearAllMocks();
+    // Mock readFileSync to return what was just written
+    mockedReadFileSync.mockReturnValue(firstWrite);
+    mockedExistsSync.mockReturnValue(true);
+    mockedDb.select.mockReturnValue({
+      from: vi.fn().mockResolvedValue([]),
+    } as never);
+    mockedGetSetting.mockResolvedValue(null);
+
+    // Second call should skip writing
+    await regenerateOpenClawConfig();
+
+    expect(mockedWriteFileSync).not.toHaveBeenCalled();
+    expect(restartState.notifyRestart).not.toHaveBeenCalled();
+  });
+
+  it("should include Telegram channel config when bot token is configured", async () => {
+    mockedDb.select.mockReturnValue({
+      from: vi.fn().mockResolvedValue([
+        {
+          id: "agent-1",
+          name: "Smithers",
+          model: "anthropic/claude-haiku-4-5-20251001",
+          allowedTools: [],
+          createdAt: new Date(),
+        },
+      ]),
+    } as never);
+
+    mockedGetSetting.mockImplementation(async (key: string) => {
+      if (key === "telegram_bot_token:agent-1") return "123456:ABC-token";
+      if (key === "telegram_bot_username:agent-1") return "acme_smithers_bot";
+      return null;
+    });
+
+    await regenerateOpenClawConfig();
+
+    const written = mockedWriteFileSync.mock.calls[0][1] as string;
+    const config = JSON.parse(written);
+
+    expect(config.channels.telegram).toEqual({
+      enabled: true,
+      botToken: "123456:ABC-token",
+      dmPolicy: "pairing",
+    });
+    expect(config.bindings).toEqual([{ agentId: "agent-1", match: { channel: "telegram" } }]);
+    expect(config.session.dmScope).toBe("per-peer");
+  });
+
+  it("should not include Telegram config when no bot token is configured", async () => {
+    mockedDb.select.mockReturnValue({
+      from: vi.fn().mockResolvedValue([
+        {
+          id: "agent-1",
+          name: "Smithers",
+          model: "anthropic/claude-haiku-4-5-20251001",
+          allowedTools: [],
+          createdAt: new Date(),
+        },
+      ]),
+    } as never);
+
+    mockedGetSetting.mockResolvedValue(null);
+
+    await regenerateOpenClawConfig();
+
+    const written = mockedWriteFileSync.mock.calls[0][1] as string;
+    const config = JSON.parse(written);
+
+    expect(config.channels).toBeUndefined();
+    expect(config.bindings).toBeUndefined();
+  });
+
+  it("should include identityLinks from channel_links table", async () => {
+    let callCount = 0;
+    mockedDb.select.mockReturnValue({
+      from: vi.fn().mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          // First call: agents table
+          return Promise.resolve([
+            { id: "agent-1", name: "Smithers", model: "m", allowedTools: [] },
+          ]);
+        }
+        // Second call: channel_links table
+        return Promise.resolve([
+          { userId: "user-1", channel: "telegram", channelUserId: "999888" },
+        ]);
+      }),
+    } as never);
+
+    mockedGetSetting.mockImplementation(async (key: string) => {
+      if (key === "telegram_bot_token:agent-1") return "token";
+      if (key === "telegram_bot_username:agent-1") return "bot";
+      return null;
+    });
+
+    await regenerateOpenClawConfig();
+
+    const written = mockedWriteFileSync.mock.calls[0][1] as string;
+    const config = JSON.parse(written);
+
+    expect(config.session.identityLinks).toEqual({
+      "user-1": ["telegram:999888"],
+    });
+  });
+});
+
+// ── applyConfigPatch ─────────────────────────────────────────────────────
+
+import { applyConfigPatch, pushStartupConfig } from "@/lib/openclaw-config";
+
+describe("applyConfigPatch", () => {
+  function mockClient(overrides?: {
+    getResult?: unknown;
+    getError?: Error;
+    patchResult?: unknown;
+    patchError?: Error;
+  }) {
+    return {
+      config: {
+        get: vi.fn().mockImplementation(() => {
+          if (overrides?.getError) return Promise.reject(overrides.getError);
+          return Promise.resolve(overrides?.getResult ?? { hash: "hash-1" });
+        }),
+        patch: vi.fn().mockImplementation(() => {
+          if (overrides?.patchError) return Promise.reject(overrides.patchError);
+          return Promise.resolve(overrides?.patchResult ?? { payload: {} });
+        }),
+      },
+    };
+  }
+
+  it("should return applied: true on success", async () => {
+    const client = mockClient();
+    const result = await applyConfigPatch(client as any, { foo: "bar" });
+
+    expect(result).toEqual({ applied: true });
+    expect(client.config.get).toHaveBeenCalledOnce();
+    expect(client.config.patch).toHaveBeenCalledWith('{"foo":"bar"}', "hash-1");
+  });
+
+  it("should retry once on hash conflict and succeed", async () => {
+    const client = mockClient();
+    client.config.patch
+      .mockRejectedValueOnce(new Error("hash_mismatch"))
+      .mockResolvedValueOnce({ payload: {} });
+    client.config.get
+      .mockResolvedValueOnce({ hash: "hash-1" })
+      .mockResolvedValueOnce({ hash: "hash-2" });
+
+    const result = await applyConfigPatch(client as any, { foo: "bar" });
+
+    expect(result).toEqual({ applied: true });
+    expect(client.config.get).toHaveBeenCalledTimes(2);
+    expect(client.config.patch).toHaveBeenCalledTimes(2);
+    expect(client.config.patch).toHaveBeenLastCalledWith('{"foo":"bar"}', "hash-2");
+  });
+
+  it("should return applied: false when both attempts fail with hash conflict", async () => {
+    const client = mockClient();
+    client.config.patch.mockRejectedValue(new Error("hash_mismatch"));
+    client.config.get
+      .mockResolvedValueOnce({ hash: "hash-1" })
+      .mockResolvedValueOnce({ hash: "hash-2" });
+
+    const result = await applyConfigPatch(client as any, { foo: "bar" });
+
+    expect(result).toEqual({ applied: false, error: "hash_mismatch" });
+  });
+
+  it("should treat timeout/disconnect as success (OpenClaw restarted)", async () => {
+    const client = mockClient();
+    client.config.patch.mockRejectedValueOnce(new Error("Request config.patch timed out"));
+
+    const result = await applyConfigPatch(client as any, { foo: "bar" });
+
+    expect(result).toEqual({ applied: true });
+    expect(client.config.patch).toHaveBeenCalledOnce();
+  });
+
+  it("should return applied: false when config.get fails", async () => {
+    const client = mockClient({ getError: new Error("not connected") });
+
+    const result = await applyConfigPatch(client as any, { foo: "bar" });
+
+    expect(result).toEqual({ applied: false, error: "not connected" });
+    expect(client.config.patch).not.toHaveBeenCalled();
+  });
+});
+
+// ── pushStartupConfig ────────────────────────────────────────────────────
+
+describe("pushStartupConfig", () => {
+  function mockClient(overrides?: { getResult?: unknown; patchError?: Error }) {
+    return {
+      config: {
+        get: vi.fn().mockResolvedValue(overrides?.getResult ?? { hash: "h1" }),
+        patch: vi.fn().mockImplementation(() => {
+          if (overrides?.patchError) return Promise.reject(overrides.patchError);
+          return Promise.resolve({ payload: {} });
+        }),
+      },
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockedExistsSync.mockReturnValue(true);
+  });
+
+  it("reads config file and pushes via applyConfigPatch", async () => {
+    const configContent = {
+      gateway: { mode: "local", auth: { token: "t" } },
+      channels: { telegram: { enabled: true, botToken: "tok" } },
+      bindings: [{ agentId: "a1", match: { channel: "telegram" } }],
+      agents: { list: [{ id: "a1", name: "Smithers" }] },
+    };
+    mockedReadFileSync.mockReturnValue(JSON.stringify(configContent));
+
+    const client = mockClient();
+    const result = await pushStartupConfig(client as any);
+
+    expect(result).toEqual({ applied: true });
+    expect(client.config.patch).toHaveBeenCalled();
+    const patchArg = JSON.parse(client.config.patch.mock.calls[0][0]);
+    expect(patchArg.channels.telegram.enabled).toBe(true);
+    expect(patchArg.bindings).toEqual([{ agentId: "a1", match: { channel: "telegram" } }]);
+  });
+
+  it("returns applied: false when config file does not exist", async () => {
+    mockedReadFileSync.mockImplementation(() => {
+      throw new Error("ENOENT: no such file or directory");
+    });
+
+    const client = mockClient();
+    const result = await pushStartupConfig(client as any);
+
+    expect(result).toEqual({ applied: false, error: expect.stringContaining("ENOENT") });
+    expect(client.config.patch).not.toHaveBeenCalled();
+  });
+
+  it("returns applied: false when config file is invalid JSON", async () => {
+    mockedReadFileSync.mockReturnValue("not-json{{{");
+
+    const client = mockClient();
+    const result = await pushStartupConfig(client as any);
+
+    expect(result.applied).toBe(false);
+    expect(client.config.patch).not.toHaveBeenCalled();
   });
 });

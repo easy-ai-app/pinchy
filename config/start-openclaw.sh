@@ -60,11 +60,31 @@ auto_approve_devices() {
     while true; do
         openclaw devices approve --latest \
             --url ws://127.0.0.1:18789 \
-            --token "$token" 2>/dev/null || true
-        sleep 3
+            --token "$token" >/dev/null 2>&1 || true
+        sleep 5
     done
 }
 
+install_plugin_deps
+scan_data_directories
+
+# OpenClaw rewrites openclaw.json on startup with root-only permissions.
+# Wait briefly, then fix permissions so Pinchy can write to it.
+(sleep 3 && fix_config_permissions) &
+
+# Start auto-approver in the background (needed for Docker networking
+# where connections come from container IPs, not localhost)
+auto_approve_devices &
+
+# Start gateway. The `openclaw gateway` command daemonizes — it spawns the
+# actual gateway process and exits immediately. In a container there's no
+# systemd, so we supervise via a health-check loop instead of `wait`.
+echo "Starting OpenClaw Gateway..."
+openclaw gateway --port 18789 || true
+
+# Keep the container alive. Health-check restarts gateway if it crashes.
+# Double-check with a delay to avoid interfering with OpenClaw's internal
+# SIGUSR1 restarts (port is briefly unavailable during restart).
 while true; do
     # Fix plugin ownership for dev mode: bind-mounted plugins inherit host uid,
     # but OpenClaw requires root ownership. Safe no-op in production (already root).

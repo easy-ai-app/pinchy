@@ -9,6 +9,7 @@ import { SessionCache } from "./src/server/session-cache";
 import { validateWsSession } from "./src/server/ws-auth";
 import { restartState } from "./src/server/restart-state";
 import { WsRateLimiter } from "./src/server/ws-rate-limit";
+import { setOpenClawClient } from "./src/server/openclaw-client";
 import { logCapture } from "./src/lib/log-capture";
 
 logCapture.install();
@@ -188,6 +189,8 @@ app.prepare().then(async () => {
       maxReconnectAttempts: Infinity,
     });
 
+    setOpenClawClient(openclawClient);
+
     let hasConnected = false;
     let errorLogged = false;
 
@@ -195,13 +198,19 @@ app.prepare().then(async () => {
       // Swallow rejection — the error event handler logs once
     });
 
-    openclawClient.on("connected", () => {
+    openclawClient.on("connected", async () => {
       console.log("Connected to OpenClaw Gateway");
+      const firstConnect = !hasConnected;
       hasConnected = true;
       errorLogged = false;
       if (restartState.isRestarting) {
         restartState.notifyReady();
       }
+
+      // No startup config push needed — regenerateOpenClawConfig() writes the
+      // config file at Pinchy startup, and OpenClaw reads it on its own startup.
+      // Pushing via config.patch would cause an unnecessary internal restart
+      // that breaks Telegram polling (openclaw/openclaw#47458).
     });
 
     openclawClient.on("disconnected", () => {
