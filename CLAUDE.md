@@ -246,6 +246,26 @@ cd docs && pnpm build                 # Build docs
 
 > **Important:** Always use Docker Compose for development. The app requires PostgreSQL, OpenClaw, and automatic migrations — all handled by Docker Compose. Running `pnpm dev` directly will lead to missing migrations and broken infrastructure checks.
 
+## Research Workflow
+
+This project uses a structured research workflow in `.research/` to track investigations and decisions across sessions.
+
+### Directory structure
+- `.research/INDEX.md` — master index of all research topics (read this first)
+- `.research/active/` — open questions currently under investigation
+- `.research/decided/` — finalized decisions with rationale and rejected alternatives
+- `.research/archive/` — outdated or superseded research
+- `.research/TEMPLATE.md` — template for new research files
+
+### Rules for sessions
+1. **Start**: Read `.research/INDEX.md` and scan `active/` to understand current state before beginning work
+2. **Parallel research**: Use subagents to investigate multiple options simultaneously, then synthesize
+3. **Sub-questions**: Keep digging within the same session using subagents — don't spawn separate sessions
+4. **Fixation**: When a research topic concludes, write findings to `active/` (if ongoing) or `decided/` (if resolved)
+5. **Format**: Each finding file must include: Decision, Alternatives Rejected (and why), Open Questions
+6. **Index**: Update `INDEX.md` when adding or moving research files
+7. **Archive**: Move superseded research to `archive/`, don't delete it
+
 ## Context for AI Assistants
 
 When working on this project:
