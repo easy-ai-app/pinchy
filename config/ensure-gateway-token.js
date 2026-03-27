@@ -21,6 +21,15 @@ if (!config.gateway) config.gateway = {};
 if (!config.gateway.mode) config.gateway.mode = "local";
 if (!config.gateway.bind) config.gateway.bind = "lan";
 
+// Docker networking: trust Docker bridge IPs to skip device pairing
+if (!config.gateway.trustedProxies) {
+  config.gateway.trustedProxies = ["172.16.0.0/12", "10.0.0.0/8"];
+}
+if (!config.gateway.controlUi) config.gateway.controlUi = {};
+if (config.gateway.controlUi.allowInsecureAuth === undefined) {
+  config.gateway.controlUi.allowInsecureAuth = true;
+}
+
 if (!config.gateway.auth || !config.gateway.auth.token) {
   config.gateway.auth = {
     mode: "token",

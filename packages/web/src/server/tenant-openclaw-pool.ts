@@ -55,7 +55,7 @@ export class TenantOpenClawPool {
     }
 
     const containerName = tenant.containerName || `pinchy-openclaw-${tenant.slug}`;
-    const wsUrl = `ws://${containerName}:18789/ws`;
+    const wsUrl = `ws://${containerName}:18789`;
     const token = decrypt(tenant.gatewayToken);
 
     const client = new OpenClawClient({
@@ -66,7 +66,7 @@ export class TenantOpenClawPool {
       scopes: ["operator.admin"],
       deviceIdentityPath: DEVICE_IDENTITY_PATH,
       autoReconnect: true,
-      reconnectIntervalMs: 2000,
+      reconnectIntervalMs: 3000,
       maxReconnectAttempts: 10,
     });
 
