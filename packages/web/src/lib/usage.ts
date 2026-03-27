@@ -152,6 +152,7 @@ async function recordUsageImpl(params: RecordUsageParams, normalizedKey: string)
       agentName,
       sessionKey: normalizedKey,
       model,
+      tenantId: "default", // TODO: resolve from request tenant context
       inputTokens: deltaInput,
       outputTokens: deltaOutput,
       cacheReadTokens: deltaCacheRead,

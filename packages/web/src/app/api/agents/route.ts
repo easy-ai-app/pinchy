@@ -100,6 +100,7 @@ export async function POST(request: NextRequest) {
       templateId,
       pluginConfig: template.pluginId && pluginConfig ? pluginConfig : null,
       ownerId: session.user.id,
+      tenantId: "default", // TODO: resolve from request context when tenant switching is wired up
       allowedTools: template.allowedTools,
       tagline: tagline || template.defaultTagline || null,
       avatarSeed: generateAvatarSeed(),

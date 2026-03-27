@@ -79,6 +79,40 @@ export const verification = pgTable("verification", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// ── Tenant tables ─────────────────────────────────────────────────────
+
+export const tenants = pgTable("tenants", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  ownerId: text("owner_id")
+    .notNull()
+    .references(() => users.id),
+  status: text("status").notNull().default("provisioning"),
+  containerName: text("container_name"),
+  gatewayToken: text("gateway_token"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  deletedAt: timestamp("deleted_at"),
+});
+
+export const tenantMembers = pgTable(
+  "tenant_members",
+  {
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("member"),
+    joinedAt: timestamp("joined_at").notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.userId] })]
+);
+
 // ── Application tables ─────────────────────────────────────────────────
 
 export const agents = pgTable(
@@ -93,6 +127,9 @@ export const agents = pgTable(
     pluginConfig: jsonb("plugin_config"),
     allowedTools: jsonb("allowed_tools").$type<string[]>().notNull().default([]),
     ownerId: text("owner_id").references(() => users.id, { onDelete: "cascade" }),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
     isPersonal: boolean("is_personal").notNull().default(false),
     visibility: text("visibility").notNull().default("restricted"),
     greetingMessage: text("greeting_message"),
@@ -102,18 +139,28 @@ export const agents = pgTable(
     createdAt: timestamp("created_at").defaultNow(),
     deletedAt: timestamp("deleted_at"),
   },
-  (table) => [index("agents_owner_id_idx").on(table.ownerId)]
+  (table) => [
+    index("agents_owner_id_idx").on(table.ownerId),
+    index("agents_tenant_id_idx").on(table.tenantId),
+  ]
 );
 
-export const groups = pgTable("groups", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  name: text("name").notNull(),
-  description: text("description"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+export const groups = pgTable(
+  "groups",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: text("name").notNull(),
+    description: text("description"),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [index("groups_tenant_id_idx").on(table.tenantId)]
+);
 
 export const userGroups = pgTable(
   "user_groups",
@@ -141,22 +188,29 @@ export const agentGroups = pgTable(
   (table) => [primaryKey({ columns: [table.agentId, table.groupId] })]
 );
 
-export const invites = pgTable("invites", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  tokenHash: text("token_hash").notNull().unique(),
-  email: text("email"),
-  role: text("role").notNull().default("member"),
-  type: text("type").notNull().default("invite"),
-  createdBy: text("created_by")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at").defaultNow(),
-  expiresAt: timestamp("expires_at").notNull(),
-  claimedAt: timestamp("claimed_at"),
-  claimedByUserId: text("claimed_by_user_id").references(() => users.id),
-});
+export const invites = pgTable(
+  "invites",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    tokenHash: text("token_hash").notNull().unique(),
+    email: text("email"),
+    role: text("role").notNull().default("member"),
+    type: text("type").notNull().default("invite"),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").defaultNow(),
+    expiresAt: timestamp("expires_at").notNull(),
+    claimedAt: timestamp("claimed_at"),
+    claimedByUserId: text("claimed_by_user_id").references(() => users.id),
+  },
+  (table) => [index("invites_tenant_id_idx").on(table.tenantId)]
+);
 
 export const inviteGroups = pgTable(
   "invite_groups",
@@ -182,19 +236,31 @@ export const channelLinks = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     channel: text("channel").notNull(),
     channelUserId: text("channel_user_id").notNull(),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
     linkedAt: timestamp("linked_at").notNull().defaultNow(),
   },
   (table) => [
     index("channel_links_user_id_idx").on(table.userId),
     index("channel_links_channel_user_idx").on(table.channel, table.channelUserId),
+    index("channel_links_tenant_id_idx").on(table.tenantId),
   ]
 );
 
-export const settings = pgTable("settings", {
-  key: text("key").primaryKey(),
-  value: text("value").notNull(),
-  encrypted: boolean("encrypted").default(false),
-});
+export const settings = pgTable(
+  "settings",
+  {
+    key: text("key").primaryKey(),
+    value: text("value").notNull(),
+    encrypted: boolean("encrypted").default(false),
+    // TODO: Change PK to composite (tenantId, key) when tenant-scoping settings queries
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+  },
+  (table) => [index("settings_tenant_id_idx").on(table.tenantId)]
+);
 
 // ── Audit Trail ──────────────────────────────────────────────────────
 
@@ -210,12 +276,16 @@ export const auditLog = pgTable(
     eventType: text("event_type").notNull(),
     resource: text("resource"),
     detail: jsonb("detail"),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
     rowHmac: text("row_hmac").notNull(),
   },
   (table) => [
     index("idx_audit_timestamp").on(table.timestamp),
     index("idx_audit_actor").on(table.actorId),
     index("idx_audit_event").on(table.eventType),
+    index("idx_audit_tenant").on(table.tenantId),
   ]
 );
 
@@ -231,6 +301,9 @@ export const usageRecords = pgTable(
     agentName: text("agent_name").notNull(),
     sessionKey: text("session_key").notNull(),
     model: text("model"),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
     inputTokens: integer("input_tokens").notNull(),
     outputTokens: integer("output_tokens").notNull(),
     cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
@@ -245,6 +318,7 @@ export const usageRecords = pgTable(
     index("idx_usage_user").on(table.userId),
     index("idx_usage_agent").on(table.agentId),
     index("idx_usage_session_key").on(table.sessionKey),
+    index("idx_usage_tenant").on(table.tenantId),
   ]
 );
 
@@ -263,12 +337,18 @@ export const skills = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
     isShared: boolean("is_shared").notNull().default(false),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
-  (table) => [index("skills_user_id_idx").on(table.userId)]
+  (table) => [
+    index("skills_user_id_idx").on(table.userId),
+    index("skills_tenant_id_idx").on(table.tenantId),
+  ]
 );
 
 // ── Views ────────────────────────────────────────────────────────────

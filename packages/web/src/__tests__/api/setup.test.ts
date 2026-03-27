@@ -34,6 +34,9 @@ vi.mock("@/db", () => {
     agents: {
       findFirst: vi.fn(),
     },
+    tenants: {
+      findFirst: vi.fn().mockResolvedValue(undefined),
+    },
   };
   return {
     db: {
@@ -43,6 +46,9 @@ vi.mock("@/db", () => {
         set: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue(undefined),
         }),
+      }),
+      delete: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue(undefined),
       }),
     },
   };

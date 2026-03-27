@@ -22,7 +22,14 @@ export type MembershipDetail = {
   [key: string]: unknown;
 };
 
-export type AuditResource = "agent" | "group" | "user" | "settings" | "config" | "channel";
+export type AuditResource =
+  | "agent"
+  | "group"
+  | "user"
+  | "settings"
+  | "config"
+  | "channel"
+  | "tenant";
 
 export type AuditEventType =
   | `tool.${string}`
@@ -44,7 +51,11 @@ export type AuditEventType =
   | "user.groups_updated"
   | "user.role_updated"
   | "channel.created"
-  | "channel.deleted";
+  | "channel.deleted"
+  | "tenant.created"
+  | "tenant.updated"
+  | "tenant.deleted"
+  | "tenant.members_updated";
 
 interface HmacFields {
   timestamp: Date;
@@ -149,6 +160,7 @@ export async function appendAuditLog(entry: AuditLogEntry): Promise<void> {
     eventType: entry.eventType,
     resource: entry.resource ?? null,
     detail,
+    tenantId: "default", // TODO: resolve from request tenant context
     rowHmac,
   });
 }

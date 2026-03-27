@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { users, tenants, tenantMembers } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { seedDefaultAgent } from "@/db/seed";
@@ -39,6 +39,25 @@ export async function createAdmin(name: string, email: string, password: string)
     await db.update(users).set({ role: "admin" }).where(eq(users.id, result.user.id));
 
     await seedDefaultAgent(result.user.id);
+
+    // Create default tenant for the new admin
+    const existingTenant = await db.query.tenants.findFirst({
+      where: eq(tenants.id, "default"),
+    });
+    if (!existingTenant) {
+      await db.insert(tenants).values({
+        id: "default",
+        name: "Default",
+        slug: "default",
+        ownerId: result.user.id,
+        status: "running",
+      });
+      await db.insert(tenantMembers).values({
+        tenantId: "default",
+        userId: result.user.id,
+        role: "owner",
+      });
+    }
   } catch (error) {
     // Clean up the orphaned user if post-signup steps fail
     try {

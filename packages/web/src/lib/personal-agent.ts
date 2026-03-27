@@ -36,6 +36,7 @@ export async function createSmithersAgent({
       name: "Smithers",
       model,
       ownerId,
+      tenantId: "default", // TODO: resolve from caller context when tenant switching is wired up
       isPersonal,
       tagline: "Your reliable personal assistant",
       avatarSeed: "__smithers__",

@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
       prompt: prompt.trim(),
       icon: icon?.trim() || null,
       userId: session.user.id!,
+      tenantId: "default", // TODO: resolve from request tenant context
     })
     .returning();
 

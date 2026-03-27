@@ -1,3 +1,8 @@
+x-openclaw-build:
+  build:
+    context: .
+    dockerfile: Dockerfile.openclaw
+
 services:
   pinchy:
     build:
@@ -9,34 +14,17 @@ services:
       - DATABASE_URL=postgresql://pinchy:${DB_PASSWORD:-pinchy_dev}@db:5432/pinchy
       - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-}
       - BETTER_AUTH_URL=${BETTER_AUTH_URL:-http://localhost:${PINCHY_PORT:-7777}}
-      - OPENCLAW_WS_URL=ws://openclaw:18789
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
       - PINCHY_ENTERPRISE_KEY=${PINCHY_ENTERPRISE_KEY:-}
+      - OPENCLAW_IMAGE=${OPENCLAW_IMAGE:-pinchy-openclaw}
+      - DOCKER_NETWORK=${DOCKER_NETWORK:-pinchy_default}
     volumes:
-      - openclaw-config:/openclaw-config
-      - pinchy-workspaces:/openclaw-config/workspaces
-      - openclaw-extensions:/openclaw-extensions
       - pinchy-secrets:/app/secrets
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
-      openclaw:
-        condition: service_started
-
-  openclaw:
-    build:
-      context: .
-      dockerfile: Dockerfile.openclaw
-    expose:
-      - "18789"
-    volumes:
-      - openclaw-config:/root/.openclaw
-      - pinchy-workspaces:/root/.openclaw/workspaces
-      - openclaw-extensions:/root/.openclaw/extensions
-      - pinchy-data:/data
-      - pinchy-pdf-cache:/var/cache/pinchy-files
-    restart: unless-stopped
 
   db:
     image: postgres:17
@@ -55,9 +43,4 @@ services:
 
 volumes:
   pgdata:
-  openclaw-config:
-  pinchy-workspaces:
-  pinchy-data:
   pinchy-secrets:
-  openclaw-extensions:
-  pinchy-pdf-cache:

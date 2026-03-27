@@ -45,7 +45,12 @@ vi.mock("@assistant-ui/react", () => ({
     Error: ({ children }: any) => <div>{children}</div>,
   },
   useMessage: () => ({}),
-  useComposerRuntime: () => null,
+  useComposerRuntime: () => ({
+    subscribe: vi.fn(() => () => {}),
+    getState: vi.fn(() => ({ text: "", attachments: [] })),
+    setText: vi.fn(),
+    addAttachment: vi.fn(),
+  }),
 }));
 
 vi.mock("@/components/assistant-ui/attachment", () => ({
@@ -72,6 +77,15 @@ vi.mock("@/components/assistant-ui/tooltip-icon-button", () => ({
 
 vi.mock("@/components/ui/button", () => ({
   Button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
+}));
+
+vi.mock("@/components/assistant-ui/composer-autocomplete", () => ({
+  ComposerAutocomplete: () => null,
+}));
+
+vi.mock("@/lib/draft-store", () => ({
+  getDraft: vi.fn().mockReturnValue(undefined),
+  saveDraft: vi.fn(),
 }));
 
 vi.mock("@/components/chat", async () => {

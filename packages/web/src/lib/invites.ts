@@ -31,7 +31,15 @@ export async function createInvite({
   const invite = await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(invites)
-      .values({ tokenHash, email, role, type, createdBy, expiresAt })
+      .values({
+        tokenHash,
+        email,
+        role,
+        type,
+        createdBy,
+        expiresAt,
+        tenantId: "default" /* TODO: resolve from request tenant context */,
+      })
       .returning();
 
     if (groupIds && groupIds.length > 0) {

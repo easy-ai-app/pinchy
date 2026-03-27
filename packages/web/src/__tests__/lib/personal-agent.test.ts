@@ -60,6 +60,18 @@ vi.mock("@/lib/onboarding-prompt", () => ({
   ONBOARDING_GREETING: "Test onboarding greeting",
 }));
 
+// ── Mock @/lib/provider-models ───────────────────────────────────────────────
+vi.mock("@/lib/provider-models", () => ({
+  getDefaultModel: vi.fn().mockImplementation((provider: string) => {
+    const defaults: Record<string, string> = {
+      anthropic: "anthropic/claude-sonnet-4-20250514",
+      openai: "openai/gpt-4o-mini",
+      google: "google/gemini-2.5-flash",
+    };
+    return Promise.resolve(defaults[provider] || "anthropic/claude-sonnet-4-20250514");
+  }),
+}));
+
 // ── Mock @/lib/providers ─────────────────────────────────────────────────────
 vi.mock("@/lib/providers", () => ({
   PROVIDERS: {
@@ -121,6 +133,7 @@ describe("createSmithersAgent", () => {
       name: "Smithers",
       model: "anthropic/claude-sonnet-4-20250514",
       ownerId: "user-1",
+      tenantId: "default",
       isPersonal: true,
       tagline: "Your reliable personal assistant",
       avatarSeed: "__smithers__",

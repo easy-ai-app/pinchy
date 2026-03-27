@@ -47,7 +47,11 @@ export async function POST(request: NextRequest) {
 
   const [group] = await db
     .insert(groups)
-    .values({ name: name.trim(), description: description?.trim() || null })
+    .values({
+      name: name.trim(),
+      description: description?.trim() || null,
+      tenantId: "default" /* TODO: resolve from request tenant context */,
+    })
     .returning();
 
   appendAuditLog({

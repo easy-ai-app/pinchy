@@ -52,6 +52,7 @@ export async function POST(req: Request) {
     userId: session.user.id,
     channel: "telegram",
     channelUserId: telegramUserId,
+    tenantId: "default", // TODO: resolve from request tenant context
   });
 
   // Add to OpenClaw's native allow-from store (no config change, no channel restart)

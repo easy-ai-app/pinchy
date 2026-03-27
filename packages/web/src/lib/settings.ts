@@ -16,7 +16,12 @@ export async function setSetting(key: string, value: string, encrypted = false) 
   const storedValue = encrypted ? encrypt(value) : value;
   await db
     .insert(settings)
-    .values({ key, value: storedValue, encrypted })
+    .values({
+      key,
+      value: storedValue,
+      encrypted,
+      tenantId: "default" /* TODO: resolve from request tenant context */,
+    })
     .onConflictDoUpdate({
       target: settings.key,
       set: { value: storedValue, encrypted },
