@@ -10,7 +10,7 @@ vi.mock("@/lib/settings", () => ({
 }));
 
 vi.mock("@/lib/tenant-context", () => ({
-  getTenantId: vi.fn().mockResolvedValue("default"),
+  resolveTenantByGatewayToken: vi.fn().mockResolvedValue("default"),
 }));
 
 vi.mock("@/lib/context-sync", () => ({

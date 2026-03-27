@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateGatewayToken } from "@/lib/gateway-auth";
 import { appendAuditLog } from "@/lib/audit";
 import { sanitizeDetail } from "@/lib/audit-sanitize";
+import { resolveTenantByGatewayToken } from "@/lib/tenant-context";
 
 interface ToolAuditPayload {
   phase: "start" | "end";
@@ -115,8 +116,8 @@ export async function POST(request: NextRequest) {
 
   const sanitizedDetail = sanitizeDetail(detail);
 
-  // TODO: resolve tenantId from gateway token or agent lookup once per-tenant OpenClaw containers land
-  const tenantId = "default";
+  const bearerToken = request.headers.get("Authorization")?.slice(7) ?? "";
+  const tenantId = (await resolveTenantByGatewayToken(bearerToken)) ?? "default";
 
   try {
     await appendAuditLog({

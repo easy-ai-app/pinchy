@@ -10,7 +10,7 @@ vi.mock("@/lib/audit", () => ({
 }));
 
 vi.mock("@/lib/tenant-context", () => ({
-  getTenantId: vi.fn().mockResolvedValue("default"),
+  resolveTenantByGatewayToken: vi.fn().mockResolvedValue("default"),
 }));
 
 import { validateGatewayToken } from "@/lib/gateway-auth";

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { tenantMembers, tenants } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
+import { decrypt } from "@/lib/encryption";
 
 /**
  * Resolve the tenantId from the request.
@@ -126,4 +127,27 @@ export async function requireTenantMember(
   }
 
   return { role: membership.role };
+}
+
+/**
+ * Resolve tenantId from a gateway token by checking all active tenants.
+ * Used by internal API routes where auth is via gateway token, not user session.
+ */
+export async function resolveTenantByGatewayToken(token: string): Promise<string | null> {
+  const allTenants = await db
+    .select({ id: tenants.id, gatewayToken: tenants.gatewayToken })
+    .from(tenants)
+    .where(isNull(tenants.deletedAt));
+
+  for (const t of allTenants) {
+    if (t.gatewayToken) {
+      try {
+        const decrypted = decrypt(t.gatewayToken);
+        if (decrypted === token) return t.id;
+      } catch {
+        // Skip tenants with invalid encrypted tokens
+      }
+    }
+  }
+  return null;
 }

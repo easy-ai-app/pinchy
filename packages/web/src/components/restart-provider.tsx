@@ -4,6 +4,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { CircleCheck, CircleX } from "lucide-react";
 import { ReportIssueLink } from "@/components/report-issue-link";
 import type { DiagnosticsResult } from "@/lib/github-issue";
+import { useTenant } from "@/components/tenant-provider";
 
 interface RestartContextValue {
   isRestarting: boolean;
@@ -23,25 +24,30 @@ const POLL_INTERVAL_MS = 2000;
 const TIMEOUT_MS = 30_000;
 
 export function RestartProvider({ children }: { children: React.ReactNode }) {
+  const { currentTenant } = useTenant();
   const [isRestarting, setIsRestarting] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
   const [diagnostics, setDiagnostics] = useState<DiagnosticsResult | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const healthUrl = currentTenant
+    ? `/api/health/openclaw?tenantId=${currentTenant.id}`
+    : "/api/health/openclaw";
+
   const checkHealth = useCallback(async () => {
     try {
-      const res = await fetch("/api/health/openclaw");
+      const res = await fetch(healthUrl);
       const data = await res.json();
-      if (data.status === "ok") {
+      if (data.status === "ok" || data.status === "healthy") {
         setIsRestarting(false);
-      } else if (data.status === "restarting") {
+      } else if (data.status === "restarting" || data.status === "unhealthy") {
         setIsRestarting(true);
       }
     } catch {
       // Keep current state on fetch error — polling will retry
     }
-  }, []);
+  }, [healthUrl]);
 
   const triggerRestart = useCallback(() => {
     setIsRestarting(true);
@@ -50,10 +56,10 @@ export function RestartProvider({ children }: { children: React.ReactNode }) {
   // Mount-time health check — subscribes to external health endpoint
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/health/openclaw")
+    fetch(healthUrl)
       .then((res) => res.json())
       .then((data) => {
-        if (!cancelled && data.status === "restarting") {
+        if (!cancelled && (data.status === "restarting" || data.status === "unhealthy")) {
           setIsRestarting(true);
         }
       })
@@ -61,7 +67,7 @@ export function RestartProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [healthUrl]);
 
   // Poll while restarting
   useEffect(() => {

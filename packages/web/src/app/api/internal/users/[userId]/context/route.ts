@@ -6,6 +6,7 @@ import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { syncUserContextToWorkspaces } from "@/lib/context-sync";
 import { getSetting } from "@/lib/settings";
+import { resolveTenantByGatewayToken } from "@/lib/tenant-context";
 
 export async function PUT(
   request: NextRequest,
@@ -15,8 +16,8 @@ export async function PUT(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // TODO: resolve tenantId from gateway token or request context once per-tenant OpenClaw containers land
-  const tenantId = "default";
+  const bearerToken = request.headers.get("Authorization")?.slice(7) ?? "";
+  const tenantId = (await resolveTenantByGatewayToken(bearerToken)) ?? "default";
 
   const { userId } = await params;
   const { content } = await request.json();

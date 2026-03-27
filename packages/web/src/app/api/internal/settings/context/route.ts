@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateGatewayToken } from "@/lib/gateway-auth";
 import { setSetting } from "@/lib/settings";
 import { syncOrgContextToWorkspaces } from "@/lib/context-sync";
+import { resolveTenantByGatewayToken } from "@/lib/tenant-context";
 
 export async function PUT(request: NextRequest) {
   if (!validateGatewayToken(request.headers)) {
@@ -15,8 +16,8 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "content must be a string" }, { status: 400 });
   }
 
-  // TODO: resolve tenantId from gateway token or request context once per-tenant OpenClaw containers land
-  const tenantId = "default";
+  const bearerToken = request.headers.get("Authorization")?.slice(7) ?? "";
+  const tenantId = (await resolveTenantByGatewayToken(bearerToken)) ?? "default";
 
   await setSetting("org_context", content, false, tenantId);
   await syncOrgContextToWorkspaces();

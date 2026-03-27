@@ -108,6 +108,7 @@ export async function POST(
     actorId: actorUserId,
     eventType: "tenant.members_updated",
     resource: `tenant:${tenantId}`,
+    tenantId,
     detail: {
       added: [{ id: userId, name: user.name }],
       removed: [],

@@ -126,6 +126,7 @@ export async function PATCH(
       actorId: userId,
       eventType: "tenant.updated",
       resource: `tenant:${tenantId}`,
+      tenantId,
       detail: { changes },
     }).catch(() => {});
   }
@@ -191,6 +192,7 @@ export async function DELETE(
     actorId: userId,
     eventType: "tenant.deleted",
     resource: `tenant:${tenantId}`,
+    tenantId,
     detail: { name: tenant.name },
   }).catch(() => {});
 

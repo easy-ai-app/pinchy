@@ -1,10 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { NextRequest } from "next/server";
 
 const mockRestartState = { isRestarting: false, triggeredAt: null as number | null };
 
 vi.mock("@/server/restart-state", () => ({
   restartState: mockRestartState,
 }));
+
+vi.mock("@/lib/tenant-container-manager", () => ({
+  tenantContainerManager: {
+    healthCheck: vi.fn().mockResolvedValue({ running: true }),
+  },
+}));
+
+function makeGetRequest(searchParams?: Record<string, string>) {
+  const url = new URL("http://localhost/api/health/openclaw");
+  if (searchParams) {
+    for (const [key, value] of Object.entries(searchParams)) {
+      url.searchParams.set(key, value);
+    }
+  }
+  return new NextRequest(url);
+}
 
 describe("GET /api/health/openclaw", () => {
   let GET: typeof import("@/app/api/health/openclaw/route").GET;
@@ -18,7 +35,7 @@ describe("GET /api/health/openclaw", () => {
   });
 
   it("returns ok when not restarting", async () => {
-    const response = await GET();
+    const response = await GET(makeGetRequest());
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -29,7 +46,7 @@ describe("GET /api/health/openclaw", () => {
     mockRestartState.isRestarting = true;
     mockRestartState.triggeredAt = 1700000000000;
 
-    const response = await GET();
+    const response = await GET(makeGetRequest());
     const body = await response.json();
 
     expect(response.status).toBe(200);

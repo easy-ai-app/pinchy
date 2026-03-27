@@ -28,6 +28,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { TenantStatusDot } from "@/components/tenant-status-dot";
 import { CreateTenantDialog } from "@/components/create-tenant-dialog";
 import { TenantMembersSheet } from "@/components/tenant-members-sheet";
+import { useTenant } from "@/components/tenant-provider";
 import { toast } from "sonner";
 import { Users, Pencil, Trash2 } from "lucide-react";
 
@@ -60,6 +61,7 @@ export function TenantsPageContent({ openCreateDialog, currentUserId }: TenantsP
   const [deleteConfirmSlug, setDeleteConfirmSlug] = useState("");
   const [deleting, setDeleting] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { refreshTenants } = useTenant();
 
   const fetchTenants = useCallback(async () => {
     try {
@@ -141,6 +143,7 @@ export function TenantsPageContent({ openCreateDialog, currentUserId }: TenantsP
         toast.success("Tenant renamed");
         setRenameTenant(null);
         fetchTenants();
+        refreshTenants();
       } else {
         const data = await res.json();
         setRenameError(data.error || "Failed to rename tenant");
@@ -164,6 +167,7 @@ export function TenantsPageContent({ openCreateDialog, currentUserId }: TenantsP
         setDeleteTenant(null);
         setDeleteConfirmSlug("");
         fetchTenants();
+        refreshTenants();
       } else {
         const data = await res.json();
         toast.error(data.error || "Failed to delete tenant");
@@ -306,6 +310,7 @@ export function TenantsPageContent({ openCreateDialog, currentUserId }: TenantsP
         onCreated={() => {
           setCreateOpen(false);
           fetchTenants();
+          refreshTenants();
         }}
       />
 

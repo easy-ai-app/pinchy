@@ -68,6 +68,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     actorId: actorUserId,
     eventType: "tenant.members_updated",
     resource: `tenant:${tenantId}`,
+    tenantId,
     detail: {
       added: [],
       removed: [{ id: targetUserId, name: targetUser?.name ?? "unknown" }],
@@ -148,6 +149,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     actorId: actorUserId,
     eventType: "tenant.members_updated",
     resource: `tenant:${tenantId}`,
+    tenantId,
     detail: {
       added: [],
       removed: [],

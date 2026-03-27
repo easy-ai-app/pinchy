@@ -28,6 +28,10 @@ vi.mock("@/lib/settings", () => ({
   getSetting: vi.fn().mockResolvedValue(null),
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  resolveTenantByGatewayToken: vi.fn().mockResolvedValue("default"),
+}));
+
 import { validateGatewayToken } from "@/lib/gateway-auth";
 import { syncUserContextToWorkspaces } from "@/lib/context-sync";
 import { db } from "@/db";

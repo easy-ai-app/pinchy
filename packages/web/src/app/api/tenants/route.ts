@@ -160,6 +160,7 @@ export async function POST(request: NextRequest) {
     actorId: userId,
     eventType: "tenant.created",
     resource: `tenant:${tenant.id}`,
+    tenantId: tenant.id,
     detail: { id: tenant.id, name: tenant.name, slug: tenant.slug },
   }).catch(() => {});
 
