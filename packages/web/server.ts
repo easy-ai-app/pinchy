@@ -10,6 +10,7 @@ import { validateWsSession } from "./src/server/ws-auth";
 import { restartState } from "./src/server/restart-state";
 import { WsRateLimiter } from "./src/server/ws-rate-limit";
 import { setOpenClawClient } from "./src/server/openclaw-client";
+import { tenantOpenClawPool } from "./src/server/tenant-openclaw-pool";
 import { logCapture } from "./src/lib/log-capture";
 import { resolveTenantId } from "./src/lib/tenant-context";
 
@@ -148,21 +149,48 @@ app.prepare().then(async () => {
     const sessionInfo = sessionMap.get(clientWs);
     if (!sessionInfo) return;
 
-    const router = openclawClient
-      ? new ClientRouter(
+    // Resolve OpenClaw client for this tenant (pool first, global fallback)
+    let router: ClientRouter | null = null;
+
+    const initRouter = async () => {
+      // 1. Try per-tenant OpenClaw container from pool
+      const tenantClient = await tenantOpenClawPool.getClient(sessionInfo.tenantId);
+      if (tenantClient) {
+        router = new ClientRouter(
+          tenantClient,
+          sessionInfo.userId,
+          sessionInfo.userRole,
+          sessionCache,
+          sessionInfo.tenantId
+        );
+        return;
+      }
+      // 2. Fall back to global OpenClaw client (legacy single-container setup)
+      if (openclawClient) {
+        router = new ClientRouter(
           openclawClient,
           sessionInfo.userId,
           sessionInfo.userRole,
           sessionCache,
           sessionInfo.tenantId
-        )
-      : null;
+        );
+      }
+    };
 
-    clientWs.on("message", (data) => {
+    // Start connecting (non-blocking)
+    const routerReady = initRouter();
+
+    clientWs.on("message", async (data) => {
       try {
         const parsed = JSON.parse(data.toString());
+        // Wait for router to be ready on first message
         if (!router) {
-          clientWs.send(JSON.stringify({ type: "error", message: "OpenClaw not configured" }));
+          await routerReady;
+        }
+        if (!router) {
+          clientWs.send(
+            JSON.stringify({ type: "error", message: "OpenClaw not configured for this tenant" })
+          );
           return;
         }
         router.handleMessage(clientWs, parsed).catch((err) => {
