@@ -10,6 +10,7 @@ const MEMORY_LIMIT = parseInt(process.env.TENANT_MEMORY_LIMIT || "536870912", 10
 const CPU_LIMIT = parseFloat(process.env.TENANT_CPU_LIMIT || "0.5");
 const GATEWAY_TOKEN_POLL_INTERVAL_MS = 1000;
 const GATEWAY_TOKEN_MAX_WAIT_MS = 60000;
+const OPENCLAW_GATEWAY_PORT = 18789;
 
 export class TenantContainerManager {
   private docker: Docker;

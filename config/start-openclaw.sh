@@ -80,7 +80,7 @@ auto_approve_devices &
 # actual gateway process and exits immediately. In a container there's no
 # systemd, so we supervise via a health-check loop instead of `wait`.
 echo "Starting OpenClaw Gateway..."
-openclaw gateway --port 18789 || true
+openclaw gateway --bind lan --port 18789 || true
 
 # Keep the container alive. Health-check restarts gateway if it crashes.
 # Double-check with a delay to avoid interfering with OpenClaw's internal
@@ -92,7 +92,7 @@ while true; do
 
     install_plugin_deps
     scan_data_directories
-    openclaw gateway --port 18789 &
+    openclaw gateway --bind lan --port 18789 &
     PID=$!
     echo "OpenClaw Gateway running (pid: $PID)"
 
