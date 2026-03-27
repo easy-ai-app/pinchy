@@ -1,5 +1,4 @@
 ---
-
 ## title: 'Product Brief: Manus CIS'
 type: product-brief
 status: complete
@@ -39,7 +38,7 @@ project: productive
 2. **Decomposes into executable steps** — Search → Extract → Filter → Score → Sync to CRM
 3. **Executes autonomously** — Uses web browser, APIs, integrations to complete each step
 4. **Verifies results** — Built-in verification agent checks outputs before delivery
-5. **Delivers production-ready output** — Leads synced to Битрикс24, report in Telegram, proposal ready to send
+5. **Delivers production-ready output** — Leads synced to Битрикс24, proposal ready to send
 
 **Key capabilities:**
 
@@ -51,7 +50,6 @@ project: productive
 **Access:**
 
 - **Web App** — Full functionality for complex multi-step workflows
-- **Chrome Extension** — Quick context capture, always accessible
 
 **Integrations:**
 
@@ -61,16 +59,13 @@ project: productive
 
 ## What Makes This Different
 
-
 | Manus (Western)      | Manus CIS                                 |
 | -------------------- | ----------------------------------------- |
 | $19-199/mo           | 300-1000₽/mo (**5-20x cheaper**)          |
 | English only         | Russian first                             |
-| Western integrations | Битрикс24, amoCRM, Telegram               |
+| Western integrations | Битрикс24, amoCRM                         |
 | Complex onboarding   | 30-second start                           |
 | Claude/GPT-4         | DeepSeek/Qwen (same quality, 90% cheaper) |
-| Platform-centric     | Web + Extension (always accessible)       |
-
 
 **Defensible moats:**
 
@@ -97,7 +92,7 @@ project: productive
 - Pain: Finding clients, writing proposals, managing multiple gigs
 - Use case: "Find matching jobs, draft proposals"
 - Willingness to pay: 500-1,500₽/mo
-- Channel: Telegram, freelancer platforms
+- Channel: Freelancer platforms
 
 **Tertiary: Блогеры**
 
@@ -112,7 +107,7 @@ project: productive
 
 ## Success Criteria
 
-**Month 1-3 (MVPvalidation):**
+**Month 1-3 (MVP — Q2, production-ready):**
 
 - 60% activation rate (complete first task successfully)
 - 40% D7 retention
@@ -136,32 +131,131 @@ project: productive
 
 ## Scope
 
-### In Scope (MVP — 1.5 months)
+### In Scope (MVP — Q2, 3 months to production-ready)
 
-- Web App with task creation, execution tracking, history
-- Chrome Extension for quick input and context capture
-- Core agent capabilities: Lead research, Meeting prep, Content assistance, Agent report tool , agent web search tool , agent web scrapping 
-- Marketplace architecture (agent skills/tools, Integrations: Битрикс24, amoCRM, Мой склад)
-- LLM: DeepSeek V3 (reasoning), Qwen (generation), YandexGPT (fallback)
+**Core Platform:**
+- Web App с Inbox, Chat, Notifications
+- Agent Orchestrator (CRUD + Prebuilt Agents)
+- Main Orchestration Agent
+- Agent Status monitoring
+- Per-customer agent isolation
+
+**Prebuilt Agents (P0):** См. раздел MVP Architecture → §2.2
+
+**Integrations:** См. раздел MVP Architecture → §4.1
+
+**Agent Tools:** См. раздел MVP Architecture → §4.2
+
+**User Management:**
+- Registration с email подтверждением
+- User profile
+- Notifications
+
+**Analytics:**
+- Direct visits tracking
+- User behaviour analytics
+
+**Marketing:** См. раздел MVP Architecture → §8
+
+**Infrastructure:**
 - Free tier: 20 tasks/day
 - Russian interface, 152-ФЗ compliant
 
 ### Out of Scope (MVP)
 
+- Chrome Extension
+- Telegram integration
 - Paid tiers: Lite 500₽/mo, Pro 1,000₽/mo
 - Payment: СБП, Telegram Stars
-
 - Multiple segments (freelancers, bloggers)
-- Telegram integration
-- Complex multi-agent orchestration
+- Complex multi-agent orchestration (sequential agents)
 - Team features, shared memory
-- Other CRM/ ERP integrations
+- Other CRM/ERP integrations
 
 ### Post-MVP Roadmap
 
-- **Month 2: Billing ,** Telegram integration, team features
-- **Month 3:** Advanced agent chains, analytics
-- **Month 4+:** White-label, enterprise features
+- **Month 2:** Billing (СБП, Telegram Stars), team features
+- **Month 3:** Advanced agent chains, Chrome Extension, Telegram integration
+- **Month 4+:** White-label, enterprise features, additional integrations
+
+---
+
+## MVP Architecture — Q2
+
+### 1. Creation Agents
+
+Platform для создания и настройки агентов пользователями.
+
+### 2. Agent Orchestrator
+
+#### 2.1 CRUD Agents
+Управление жизненным циклом агентов: создание, чтение, обновление, удаление.
+
+#### 2.2 Prebuilt Agents (Skills)
+
+| Агент | Функция | Приоритет |
+|-------|---------|-----------|
+| **Meeting Prep** | Подготовка к встречам: CRM данные → research → briefing | P0 |
+| **Lead Researcher** | Поиск лидов → enrichment → синхронизация в CRM | P0 |
+| **Competitor Monitor** | Мониторинг конкурентов, цен, новостей рынка | P0 |
+| **Content Assistant** | Генерация контента для Telegram/YouTube/Dzen | P0 |
+| **Stock Alert** | Мониторинг остатков (МойСклад) | P1 |
+| **Supplier Researcher** | Поиск альтернативных поставщиков | P2 |
+| **Price Comparator** | Сравнение цен поставщиков | P2 |
+| **Sell** | Помощь в продажах: follow-up, pipeline | P1 |
+| **Support** | Автоответы, обработка обращений | P2 |
+
+#### 2.3 Main Orchestration Agent
+Центральный агент, координирующий выполнение multi-step задач и маршрутизацию между специализированными агентами.
+
+#### 2.4 Agent Status
+Мониторинг статуса агентов: активен, выполняется, ошибка, завершён.
+
+#### 2.5 Connect Isolated Agents per Customer
+Изоляция агентов на уровне клиента: каждый пользователь имеет свой набор агентов со своим контекстом.
+
+### 3. Agents Communication Channel in Web App
+
+- **Inbox System** — централизованный inbox для всех взаимодействий с агентами
+- **Chat One-to-One with History** — персональный чат с каждым агентом, сохранение истории
+- **Notification Users** — уведомления о завершении задач, ошибках, важных событиях
+
+### 4. Agent Tools
+
+#### 4.1 Marketplace with Integrations
+
+**CRM:**
+- amoCRM — read/write: компании, контакты, сделки, задачи
+- Битрикс24 — read/write: компании, контакты, сделки, задачи
+
+**ERP:**
+- МойСклад — read/write: товары, остатки, заказы, контрагенты
+
+#### 4.2 Tools
+- **Web Search** — поиск в интернете
+- **Web Scraping** — извлечение данных со страниц
+
+### 5. User Registration
+- Email подтверждение
+- Профиль пользователя
+- Настройки уведомлений
+
+### 6. Analytics
+- **Direct** — прямые заходы, источники
+- **Visits** — посещения, поведение пользователей
+
+### 7. Landing Product Page
+- Продуктовая страница
+- Описание возможностей
+- Демонстрация агентов
+- CTV и регистрации
+
+### 8. Marketing
+- **Blog** — статьи, кейсы, туториалы
+- **Posts:**
+  - Habr — технические статьи
+  - VC.ru — бизнес-кейсы
+  - TG Channels — новости, анонсы
 
 ---
 
@@ -181,61 +275,9 @@ The default AI operations layer for CIS businesses — what happens when a sales
 
 ---
 
-## Customer Support Strategy
+## Verification & Trust
 
-**Problem:** Autonomous agents will fail. Users need help understanding errors and recovering.
-
-**MVP Approach:**
-
-| Channel | Purpose | Tier |
-|---------|---------|------|
-| **In-app help** | Contextual help, error explanations, FAQs | All users |
-| **Telegram chat** | Direct support from team, community help | All users |
-
-**In-app error handling:**
-- Human-readable error messages (not technical logs)
-- Step-by-step context: where agent stopped, why, what to do
-- Suggested actions for common issues
-- One-click retry for failed steps
-
-**Support load management:**
-- Free tier: Community + in-app help
-- Paid tiers: Priority response in Telegram chat
-
----
-
-## Verification & Trust Strategy
-
-**Problem:** Users don't trust autonomous agents. Manus has verification issues — how do we do better?
-
-**MVP Approach:**
-
-| Feature | Purpose | Implementation |
-|---------|---------|----------------|
-| **Transparency** | Users see what agent is doing | Human-readable step descriptions, not code logs |
-| **Diff view** | Preview changes before sync | Show what will be added/changed in CRM |
-| **Source links** | Prove data origin | Every extracted lead/fact has source URL |
-
-**Example UX:**
-
-```
-[Шаг 1/4] Поиск компаний... ✓
-[Шаг 2/4] Извлечение контактов... ✓
-[Шаг 3/4] Фильтрация... ✓
-
-Результат: 15 квалифицированных лидов
-
-Будет добавлено в Битрикс24:
-+ Компания "СтройМастер" (источник: example.com)
-+ Компания "МосСтрой" (источник: example2.com)
-...
-
-[Показать все 15] [Переделать] [Подтвердить]
-```
-
-**Post-MVP:**
-- Rollback: Undo sync and restore previous state
-- Confidence scores: Show agent certainty level
+Users verify agent actions before sync: human-readable step descriptions, diff view showing what changes will be made, and source links proving data origin. Every extracted lead/fact includes its source URL.
 
 ---
 
@@ -243,20 +285,52 @@ The default AI operations layer for CIS businesses — what happens when a sales
 
 **Architecture:**
 
-- Multi-agent system: Planner → Executor → Verifier
-- Router layer chooses optimal LLM per task
-- Marketplace of agent skills/tools for integrations
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Web Application                      │
+│  ┌─────────┐  ┌─────────┐  ┌──────────────────────────┐ │
+│  │  Inbox  │  │  Chat   │  │   Notifications          │ │
+│  └────┬────┘  └────┬────┘  └───────────┬──────────────┘ │
+│       │            │                    │               │
+│  ┌────┴────────────┴────────────────────┴──────────────┐│
+│  │              Main Orchestration Agent                ││
+│  └────────────────────────┬─────────────────────────────┘│
+│                           │                              │
+│  ┌────────────────────────┴─────────────────────────────┐│
+│  │              Prebuilt Agents (Skills)                 ││
+│  │  ┌─────────────┐  ┌─────────────┐  ┌──────────────┐ ││
+│  │  │Meeting Prep │  │Lead Research│  │Competitor Mon│ ││
+│  │  └─────────────┘  └─────────────┘  └──────────────┘ ││
+│  │  ┌─────────────┐  ┌─────────────┐  ┌──────────────┐ ││
+│  │  │Content Asst │  │ Stock Alert │  │    Sell      │ ││
+│  │  └─────────────┘  └─────────────┘  └──────────────┘ ││
+│  └────────────────────────┬─────────────────────────────┘│
+│                           │                              │
+│  ┌────────────────────────┴─────────────────────────────┐│
+│  │              Agent Tools Marketplace                  ││
+│  │  ┌──────────────────────────────────────────────────┐││
+│  │  │ CRM: amoCRM, Битрикс24 │ ERP: МойСклад          │││
+│  │  │ Tools: Web Search, Web Scraping                  │││
+│  │  └──────────────────────────────────────────────────┘││
+│  └─────────────────────────────────────────────────────┘│
+│                           │                              │
+│  ┌────────────────────────┴─────────────────────────────┐│
+│  │              LLM Router Layer                         ││
+│  │  DeepSeek V3 │ Qwen │ YandexGPT                      ││
+│  └─────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────┘
+```
 
 **Tech Stack:**
 
 - Agent Core: Pinchy (heypinchy.com) — outsourced agent orchestration platform
-- Frontend: Pinchy Web UI (Next.js, adapted) + Chrome Extension
-- LLM: DeepSeek V3 (primary), Qwen (secondary), YandexGPT (fallback)
+- Frontend: Pinchy Web UI (Next.js, adapted)
+- LLM: DeepSeek V3 (reasoning), Qwen (generation), YandexGPT (fallback)
 - Infrastructure: Cloud-first, auto-scaling
 
 **Key constraints:**
 
-- MVP timeline: 1.5 months
+- MVP timeline: Q2 (3 months to production-ready)
 - Budget-constrained: optimize for unit economics
 - 152-ФЗ compliance required for data handling
 - Dependency on Pinchy for agent core and Web UI
