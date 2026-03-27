@@ -15,6 +15,9 @@ export async function PUT(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // TODO: resolve tenantId from gateway token or request context once per-tenant OpenClaw containers land
+  const tenantId = "default";
+
   const { userId } = await params;
   const { content } = await request.json();
 
@@ -32,7 +35,7 @@ export async function PUT(
 
   let onboardingComplete = true;
   if (user?.role === "admin") {
-    const orgContext = await getSetting("org_context");
+    const orgContext = await getSetting("org_context", tenantId);
     onboardingComplete = orgContext !== null;
   }
 

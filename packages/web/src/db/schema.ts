@@ -89,7 +89,7 @@ export const tenants = pgTable("tenants", {
   slug: text("slug").notNull().unique(),
   ownerId: text("owner_id")
     .notNull()
-    .references(() => users.id),
+    .references(() => users.id, { onDelete: "restrict" }),
   status: text("status").notNull().default("provisioning"),
   containerName: text("container_name"),
   gatewayToken: text("gateway_token"),
@@ -251,15 +251,17 @@ export const channelLinks = pgTable(
 export const settings = pgTable(
   "settings",
   {
-    key: text("key").primaryKey(),
+    key: text("key").notNull(),
     value: text("value").notNull(),
     encrypted: boolean("encrypted").default(false),
-    // TODO: Change PK to composite (tenantId, key) when tenant-scoping settings queries
     tenantId: text("tenant_id")
       .notNull()
       .references(() => tenants.id),
   },
-  (table) => [index("settings_tenant_id_idx").on(table.tenantId)]
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.key] }),
+    index("settings_tenant_id_idx").on(table.tenantId),
+  ]
 );
 
 // ── Audit Trail ──────────────────────────────────────────────────────

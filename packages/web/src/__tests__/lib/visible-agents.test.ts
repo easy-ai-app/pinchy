@@ -31,7 +31,9 @@ import { isEnterprise } from "@/lib/enterprise";
 
 function mockSelectChain(resolvedValue: unknown) {
   vi.mocked(db.select).mockReturnValueOnce({
-    from: vi.fn().mockResolvedValue(resolvedValue),
+    from: vi.fn().mockReturnValue({
+      where: vi.fn().mockResolvedValue(resolvedValue),
+    }),
   } as never);
 }
 
@@ -71,7 +73,7 @@ describe("getVisibleAgents", () => {
     vi.mocked(getAllAgentGroupIds).mockResolvedValue(new Map());
     mockSelectChain(allAgents);
 
-    const result = await getVisibleAgents("admin-user", "admin");
+    const result = await getVisibleAgents("admin-user", "admin", "default");
 
     expect(result).toContainEqual(sharedAgentAll);
     expect(result).toContainEqual(sharedAgentRestricted);
@@ -89,7 +91,7 @@ describe("getVisibleAgents", () => {
     vi.mocked(getAllAgentGroupIds).mockResolvedValue(new Map());
     mockSelectChain([...allAgents, adminPersonal]);
 
-    const result = await getVisibleAgents("admin-user", "admin");
+    const result = await getVisibleAgents("admin-user", "admin", "default");
 
     expect(result).toContainEqual(adminPersonal);
   });
@@ -99,7 +101,7 @@ describe("getVisibleAgents", () => {
     vi.mocked(getAllAgentGroupIds).mockResolvedValue(new Map());
     mockSelectChain(allAgents);
 
-    const result = await getVisibleAgents("user-1", "member");
+    const result = await getVisibleAgents("user-1", "member", "default");
 
     expect(result).toContainEqual(sharedAgentAll);
   });
@@ -111,7 +113,7 @@ describe("getVisibleAgents", () => {
     );
     mockSelectChain(allAgents);
 
-    const result = await getVisibleAgents("user-1", "member");
+    const result = await getVisibleAgents("user-1", "member", "default");
 
     expect(result).toContainEqual(sharedAgentRestricted);
   });
@@ -121,7 +123,7 @@ describe("getVisibleAgents", () => {
     vi.mocked(getAllAgentGroupIds).mockResolvedValue(new Map([["shared-restricted", ["g2"]]]));
     mockSelectChain(allAgents);
 
-    const result = await getVisibleAgents("user-1", "member");
+    const result = await getVisibleAgents("user-1", "member", "default");
 
     expect(result).not.toContainEqual(sharedAgentRestricted);
   });
@@ -131,7 +133,7 @@ describe("getVisibleAgents", () => {
     vi.mocked(getAllAgentGroupIds).mockResolvedValue(new Map());
     mockSelectChain(allAgents);
 
-    const result = await getVisibleAgents("user-1", "member");
+    const result = await getVisibleAgents("user-1", "member", "default");
 
     expect(result).toContainEqual(personalAgentOwned);
   });
@@ -141,7 +143,7 @@ describe("getVisibleAgents", () => {
     vi.mocked(getAllAgentGroupIds).mockResolvedValue(new Map());
     mockSelectChain(allAgents);
 
-    const result = await getVisibleAgents("user-1", "member");
+    const result = await getVisibleAgents("user-1", "member", "default");
 
     expect(result).not.toContainEqual(personalAgentOther);
   });
@@ -151,7 +153,7 @@ describe("getVisibleAgents", () => {
     vi.mocked(getAllAgentGroupIds).mockResolvedValue(new Map());
     mockSelectChain(allAgents);
 
-    await getVisibleAgents("user-1", "member");
+    await getVisibleAgents("user-1", "member", "default");
 
     expect(getAllAgentGroupIds).toHaveBeenCalledTimes(1);
     expect(getAgentGroupIds).not.toHaveBeenCalled();
@@ -163,7 +165,7 @@ describe("getVisibleAgents", () => {
     vi.mocked(getAllAgentGroupIds).mockResolvedValue(new Map());
     mockSelectChain(allAgents);
 
-    const result = await getVisibleAgents("user-1", "member");
+    const result = await getVisibleAgents("user-1", "member", "default");
 
     expect(result).toContainEqual(sharedAgentRestricted);
   });
@@ -174,7 +176,7 @@ describe("getVisibleAgents", () => {
     vi.mocked(getAllAgentGroupIds).mockResolvedValue(new Map());
     mockSelectChain(allAgents);
 
-    await getVisibleAgents("user-1", "member");
+    await getVisibleAgents("user-1", "member", "default");
 
     expect(getUserGroupIds).not.toHaveBeenCalled();
     expect(getAllAgentGroupIds).not.toHaveBeenCalled();

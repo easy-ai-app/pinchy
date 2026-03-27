@@ -1,5 +1,5 @@
 // audit-exempt: User self-service action (linking own Telegram account), not an admin operation
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 import { resolvePairingCode } from "@/lib/telegram-pairing";
@@ -8,15 +8,23 @@ import { addToAllowStore, removeFromAllowStore } from "@/lib/telegram-allow-stor
 import { db } from "@/db";
 import { channelLinks } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+import { getTenantId } from "@/lib/tenant-context";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await getSession({ headers: await headers() });
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const tenantId = await getTenantId(request, session.user.id!);
+  if (!tenantId) return NextResponse.json({ error: "No tenant context" }, { status: 400 });
+
   const link = await db.query.channelLinks.findFirst({
-    where: and(eq(channelLinks.userId, session.user.id), eq(channelLinks.channel, "telegram")),
+    where: and(
+      eq(channelLinks.userId, session.user.id),
+      eq(channelLinks.channel, "telegram"),
+      eq(channelLinks.tenantId, tenantId)
+    ),
   });
 
   return NextResponse.json({
@@ -25,13 +33,16 @@ export async function GET() {
   });
 }
 
-export async function POST(req: Request) {
+export async function POST(request: NextRequest) {
   const session = await getSession({ headers: await headers() });
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { code } = await req.json();
+  const tenantId = await getTenantId(request, session.user.id!);
+  if (!tenantId) return NextResponse.json({ error: "No tenant context" }, { status: 400 });
+
+  const { code } = await request.json();
   if (!code || typeof code !== "string") {
     return NextResponse.json({ error: "Pairing code is required" }, { status: 400 });
   }
@@ -52,7 +63,7 @@ export async function POST(req: Request) {
     userId: session.user.id,
     channel: "telegram",
     channelUserId: telegramUserId,
-    tenantId: "default", // TODO: resolve from request tenant context
+    tenantId,
   });
 
   // Add to OpenClaw's native allow-from store (no config change, no channel restart)
@@ -64,20 +75,33 @@ export async function POST(req: Request) {
   return NextResponse.json({ linked: true, telegramUserId });
 }
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   const session = await getSession({ headers: await headers() });
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const tenantId = await getTenantId(request, session.user.id!);
+  if (!tenantId) return NextResponse.json({ error: "No tenant context" }, { status: 400 });
+
   // Find the user's telegram ID before deleting
   const existingLink = await db.query.channelLinks.findFirst({
-    where: and(eq(channelLinks.userId, session.user.id), eq(channelLinks.channel, "telegram")),
+    where: and(
+      eq(channelLinks.userId, session.user.id),
+      eq(channelLinks.channel, "telegram"),
+      eq(channelLinks.tenantId, tenantId)
+    ),
   });
 
   await db
     .delete(channelLinks)
-    .where(and(eq(channelLinks.userId, session.user.id), eq(channelLinks.channel, "telegram")));
+    .where(
+      and(
+        eq(channelLinks.userId, session.user.id),
+        eq(channelLinks.channel, "telegram"),
+        eq(channelLinks.tenantId, tenantId)
+      )
+    );
 
   // Remove from OpenClaw's native allow-from store (no config change, no channel restart)
   if (existingLink) {

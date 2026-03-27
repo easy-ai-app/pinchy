@@ -2,8 +2,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import { users, userGroups } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { users, userGroups, tenantMembers } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
 import { validateInviteToken, claimInvite, getInviteGroupIds } from "@/lib/invites";
 import { seedPersonalAgent } from "@/lib/personal-agent";
 import { regenerateOpenClawConfig } from "@/lib/openclaw-config";
@@ -77,6 +77,22 @@ export async function POST(request: NextRequest) {
     await db
       .insert(userGroups)
       .values(groupIds.map((groupId) => ({ userId: result.user.id, groupId })));
+  }
+
+  // Add user to the invite's tenant (if not already a member via databaseHooks)
+  const [existingMembership] = await db
+    .select({ tenantId: tenantMembers.tenantId })
+    .from(tenantMembers)
+    .where(
+      and(eq(tenantMembers.tenantId, invite.tenantId), eq(tenantMembers.userId, result.user.id))
+    );
+
+  if (!existingMembership) {
+    await db.insert(tenantMembers).values({
+      tenantId: invite.tenantId,
+      userId: result.user.id,
+      role: "member",
+    });
   }
 
   await seedPersonalAgent(result.user.id, invite.role === "admin");

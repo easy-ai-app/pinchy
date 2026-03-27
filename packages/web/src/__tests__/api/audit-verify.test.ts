@@ -5,6 +5,10 @@ vi.mock("@/lib/api-auth", () => ({
   requireAdmin: vi.fn(),
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 const mockVerifyIntegrity = vi.fn();
 vi.mock("@/lib/audit", () => ({
   verifyIntegrity: mockVerifyIntegrity,
@@ -78,7 +82,7 @@ describe("GET /api/audit/verify", () => {
     const response = await GET(request as any);
 
     expect(response.status).toBe(200);
-    expect(mockVerifyIntegrity).toHaveBeenCalledWith(10, 20);
+    expect(mockVerifyIntegrity).toHaveBeenCalledWith(10, 20, "default");
   });
 
   it("should call verifyIntegrity without params when none provided", async () => {
@@ -92,6 +96,6 @@ describe("GET /api/audit/verify", () => {
     const request = new Request("http://localhost/api/audit/verify");
     await GET(request as any);
 
-    expect(mockVerifyIntegrity).toHaveBeenCalledWith(undefined, undefined);
+    expect(mockVerifyIntegrity).toHaveBeenCalledWith(undefined, undefined, "default");
   });
 });

@@ -48,4 +48,6 @@ ALTER TABLE "usage_records" ADD CONSTRAINT "usage_records_tenant_id_tenants_id_f
 CREATE INDEX "idx_usage_tenant" ON "usage_records" USING btree ("tenant_id");--> statement-breakpoint
 ALTER TABLE "skills" ADD COLUMN "tenant_id" text;--> statement-breakpoint
 ALTER TABLE "skills" ADD CONSTRAINT "skills_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "skills_tenant_id_idx" ON "skills" USING btree ("tenant_id");
+CREATE INDEX "skills_tenant_id_idx" ON "skills" USING btree ("tenant_id");--> statement-breakpoint
+DROP VIEW IF EXISTS "active_agents";--> statement-breakpoint
+CREATE VIEW "active_agents" AS SELECT * FROM "agents" WHERE "deleted_at" IS NULL;

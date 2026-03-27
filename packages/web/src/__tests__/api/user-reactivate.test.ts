@@ -17,6 +17,9 @@ vi.mock("@/lib/auth", () => {
   };
 });
 vi.mock("@/lib/audit", () => ({ appendAuditLog: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
 vi.mock("@/db", () => ({
   db: {
     update: vi.fn(),

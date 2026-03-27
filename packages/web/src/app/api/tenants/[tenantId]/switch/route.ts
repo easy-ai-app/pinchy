@@ -28,6 +28,7 @@ export async function POST(
     httpOnly: true,
     sameSite: "lax",
     secure: isProduction,
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   });
 
   return response;

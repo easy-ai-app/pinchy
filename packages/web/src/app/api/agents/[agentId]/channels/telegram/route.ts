@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api-auth";
 import { validateTelegramBotToken } from "@/lib/telegram";
 import { getSetting, setSetting, deleteSetting } from "@/lib/settings";
@@ -7,14 +7,29 @@ import { regenerateOpenClawConfig } from "@/lib/openclaw-config";
 import { clearAllowStore } from "@/lib/telegram-allow-store";
 import { db } from "@/db";
 import { agents } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
+import { getTenantId } from "@/lib/tenant-context";
 
-export async function GET(req: Request, { params }: { params: Promise<{ agentId: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ agentId: string }> }) {
   const admin = await requireAdmin();
   if (admin instanceof NextResponse) return admin;
+
+  const tenantId = await getTenantId(req, admin.user.id!);
+  if (!tenantId) {
+    return NextResponse.json({ error: "No tenant context" }, { status: 400 });
+  }
+
   const { agentId } = await params;
 
-  const botToken = await getSetting(`telegram_bot_token:${agentId}`);
+  // Verify agent belongs to tenant
+  const agent = await db.query.agents.findFirst({
+    where: and(eq(agents.id, agentId), eq(agents.tenantId, tenantId)),
+  });
+  if (!agent) {
+    return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+  }
+
+  const botToken = await getSetting(`telegram_bot_token:${agentId}`, tenantId);
   if (!botToken) {
     return NextResponse.json({ configured: false });
   }
@@ -23,9 +38,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ agentId:
   return NextResponse.json({ configured: true, hint });
 }
 
-export async function POST(req: Request, { params }: { params: Promise<{ agentId: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ agentId: string }> }) {
   const admin = await requireAdmin();
   if (admin instanceof NextResponse) return admin;
+
+  const tenantId = await getTenantId(req, admin.user.id!);
+  if (!tenantId) {
+    return NextResponse.json({ error: "No tenant context" }, { status: 400 });
+  }
+
   const { agentId } = await params;
   const { botToken } = await req.json();
 
@@ -34,7 +55,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ agentId
   }
 
   const agent = await db.query.agents.findFirst({
-    where: eq(agents.id, agentId),
+    where: and(eq(agents.id, agentId), eq(agents.tenantId, tenantId)),
   });
   if (!agent) {
     return NextResponse.json({ error: "Agent not found" }, { status: 404 });
@@ -47,8 +68,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ agentId
   }
 
   // DB first (source of truth)
-  await setSetting(`telegram_bot_token:${agentId}`, botToken, true);
-  await setSetting(`telegram_bot_username:${agentId}`, validation.botUsername!, false);
+  await setSetting(`telegram_bot_token:${agentId}`, botToken, true, tenantId);
+  await setSetting(`telegram_bot_username:${agentId}`, validation.botUsername!, false, tenantId);
 
   // Regenerate config file — OpenClaw detects the change and hot-reloads
   await regenerateOpenClawConfig();
@@ -63,6 +84,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ agentId
       channel: "telegram",
       botUsername: validation.botUsername,
     },
+    tenantId,
   });
 
   return NextResponse.json({
@@ -71,20 +93,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ agentId
   });
 }
 
-export async function DELETE(req: Request, { params }: { params: Promise<{ agentId: string }> }) {
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ agentId: string }> }
+) {
   const admin = await requireAdmin();
   if (admin instanceof NextResponse) return admin;
+
+  const tenantId = await getTenantId(req, admin.user.id!);
+  if (!tenantId) {
+    return NextResponse.json({ error: "No tenant context" }, { status: 400 });
+  }
+
   const { agentId } = await params;
 
   const agent = await db.query.agents.findFirst({
-    where: eq(agents.id, agentId),
+    where: and(eq(agents.id, agentId), eq(agents.tenantId, tenantId)),
   });
   if (!agent) {
     return NextResponse.json({ error: "Agent not found" }, { status: 404 });
   }
 
-  await deleteSetting(`telegram_bot_token:${agentId}`);
-  await deleteSetting(`telegram_bot_username:${agentId}`);
+  await deleteSetting(`telegram_bot_token:${agentId}`, tenantId);
+  await deleteSetting(`telegram_bot_username:${agentId}`, tenantId);
 
   // Clear allow-from store and regenerate config (removes channel entirely)
   clearAllowStore();
@@ -100,6 +131,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ agent
       agent: { id: agentId, name: agent.name },
       channel: "telegram",
     },
+    tenantId,
   });
 
   return NextResponse.json({ success: true });

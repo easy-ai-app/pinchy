@@ -41,6 +41,10 @@ vi.mock("@/lib/settings", () => ({
   deleteSetting: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 vi.mock("drizzle-orm", async (importOriginal) => {
   const actual = await importOriginal();
   return {
@@ -53,7 +57,7 @@ vi.mock("drizzle-orm", async (importOriginal) => {
 import { DELETE } from "@/app/api/settings/telegram/all/route";
 import { appendAuditLog } from "@/lib/audit";
 import { deleteSetting } from "@/lib/settings";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const adminSession = {
   user: { id: "user-1", email: "admin@test.com", role: "admin" },
@@ -70,12 +74,12 @@ describe("DELETE /api/settings/telegram/all", () => {
       NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     );
 
-    const response = await DELETE();
+    const response = await DELETE(new NextRequest("http://localhost/api/settings/telegram/all"));
     expect(response.status).toBe(401);
   });
 
   it("deletes all telegram channel links", async () => {
-    const response = await DELETE();
+    const response = await DELETE(new NextRequest("http://localhost/api/settings/telegram/all"));
     expect(response.status).toBe(200);
 
     // channelLinks where channel=telegram deleted
@@ -94,24 +98,24 @@ describe("DELETE /api/settings/telegram/all", () => {
       }),
     } as never);
 
-    const response = await DELETE();
+    const response = await DELETE(new NextRequest("http://localhost/api/settings/telegram/all"));
     expect(response.status).toBe(200);
 
-    expect(deleteSetting).toHaveBeenCalledWith("telegram_bot_token:agent-1");
-    expect(deleteSetting).toHaveBeenCalledWith("telegram_bot_username:agent-1");
-    expect(deleteSetting).toHaveBeenCalledWith("telegram_bot_token:agent-2");
-    expect(deleteSetting).toHaveBeenCalledWith("telegram_bot_username:agent-2");
+    expect(deleteSetting).toHaveBeenCalledWith("telegram_bot_token:agent-1", "default");
+    expect(deleteSetting).toHaveBeenCalledWith("telegram_bot_username:agent-1", "default");
+    expect(deleteSetting).toHaveBeenCalledWith("telegram_bot_token:agent-2", "default");
+    expect(deleteSetting).toHaveBeenCalledWith("telegram_bot_username:agent-2", "default");
   });
 
   it("regenerates OpenClaw config", async () => {
-    const response = await DELETE();
+    const response = await DELETE(new NextRequest("http://localhost/api/settings/telegram/all"));
     expect(response.status).toBe(200);
 
     expect(mockRegenerateOpenClawConfig).toHaveBeenCalled();
   });
 
   it("logs audit event", async () => {
-    const response = await DELETE();
+    const response = await DELETE(new NextRequest("http://localhost/api/settings/telegram/all"));
     expect(response.status).toBe(200);
 
     expect(appendAuditLog).toHaveBeenCalledWith(

@@ -22,6 +22,10 @@ vi.mock("@/lib/settings", () => ({
   setSetting: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 import { auth } from "@/lib/auth";
 import { getAllSettings } from "@/lib/settings";
 
@@ -37,7 +41,7 @@ describe("GET /api/settings", () => {
   it("returns 401 when not authenticated", async () => {
     vi.mocked(auth.api.getSession).mockResolvedValueOnce(null);
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/settings"));
     expect(response.status).toBe(401);
 
     const body = await response.json();
@@ -50,7 +54,7 @@ describe("GET /api/settings", () => {
       expires: "",
     } as any);
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/settings"));
     expect(response.status).toBe(403);
 
     const body = await response.json();
@@ -66,7 +70,7 @@ describe("GET /api/settings", () => {
       { key: "default_provider", value: "anthropic", encrypted: false },
     ]);
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/settings"));
     expect(response.status).toBe(200);
 
     const body = await response.json();
@@ -82,7 +86,7 @@ describe("GET /api/settings", () => {
       { key: "anthropic_api_key", value: "sk-secret", encrypted: true },
     ]);
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/settings"));
     expect(response.status).toBe(200);
 
     const body = await response.json();
@@ -148,6 +152,6 @@ describe("POST /api/settings", () => {
     const response = await POST(request);
     expect(response.status).toBe(200);
 
-    expect(setSetting).toHaveBeenCalledWith("default_provider", "openai", false);
+    expect(setSetting).toHaveBeenCalledWith("default_provider", "openai", false, "default");
   });
 });

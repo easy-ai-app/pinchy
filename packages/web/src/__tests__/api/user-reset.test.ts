@@ -23,6 +23,10 @@ vi.mock("@/lib/invites", () => ({
   createInvite: vi.fn(),
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 vi.mock("@/db", () => ({
   db: {
     query: {
@@ -178,6 +182,7 @@ describe("POST /api/users/[userId]/reset", () => {
       role: "member",
       type: "reset",
       createdBy: "admin-1",
+      tenantId: "default",
     });
   });
 
@@ -218,6 +223,7 @@ describe("POST /api/users/[userId]/reset", () => {
       role: "member",
       type: "reset",
       createdBy: "admin-1",
+      tenantId: "default",
     });
   });
 });

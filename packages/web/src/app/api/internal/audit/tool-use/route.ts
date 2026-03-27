@@ -115,6 +115,9 @@ export async function POST(request: NextRequest) {
 
   const sanitizedDetail = sanitizeDetail(detail);
 
+  // TODO: resolve tenantId from gateway token or agent lookup once per-tenant OpenClaw containers land
+  const tenantId = "default";
+
   try {
     await appendAuditLog({
       actorType,
@@ -123,6 +126,7 @@ export async function POST(request: NextRequest) {
       eventType: `tool.${payload.toolName}`,
       resource: `agent:${payload.agentId}`,
       detail: sanitizedDetail,
+      tenantId,
     });
   } catch {
     return NextResponse.json({ error: "Audit logging failed" }, { status: 500 });

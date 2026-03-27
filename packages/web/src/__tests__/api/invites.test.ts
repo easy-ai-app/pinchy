@@ -27,6 +27,10 @@ vi.mock("@/lib/audit", () => ({
   appendAuditLog: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 vi.mock("@/db", () => {
   const mockFrom = vi.fn().mockImplementation(() => {
     const result = Promise.resolve([]);
@@ -167,6 +171,7 @@ describe("POST /api/users/invite", () => {
       email: "newuser@test.com",
       role: "member",
       createdBy: "admin-1",
+      tenantId: "default",
     });
   });
 
@@ -201,6 +206,7 @@ describe("POST /api/users/invite", () => {
       email: undefined,
       role: "member",
       createdBy: "admin-1",
+      tenantId: "default",
     });
   });
 
@@ -238,6 +244,7 @@ describe("POST /api/users/invite", () => {
       role: "member",
       createdBy: "admin-1",
       groupIds: ["group-1", "group-2"],
+      tenantId: "default",
     });
   });
 
@@ -290,6 +297,7 @@ describe("POST /api/users/invite", () => {
           { id: "group-2", name: "Marketing" },
         ],
       },
+      tenantId: "default",
     });
   });
 
@@ -329,6 +337,7 @@ describe("POST /api/users/invite", () => {
         email: "solo@test.com",
         role: "member",
       },
+      tenantId: "default",
     });
   });
 });
@@ -347,7 +356,7 @@ describe("GET /api/users/invites", () => {
   it("returns 401 when not authenticated", async () => {
     vi.mocked(auth.api.getSession).mockResolvedValueOnce(null);
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/users/invites"));
     expect(response.status).toBe(401);
 
     const body = await response.json();
@@ -360,7 +369,7 @@ describe("GET /api/users/invites", () => {
       expires: "",
     } as any);
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/users/invites"));
     expect(response.status).toBe(403);
 
     const body = await response.json();
@@ -396,7 +405,9 @@ describe("GET /api/users/invites", () => {
 
     vi.mocked(db.select)
       .mockReturnValueOnce({
-        from: vi.fn().mockResolvedValueOnce(fakeInvites),
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue(fakeInvites),
+        }),
       } as never)
       .mockReturnValueOnce({
         from: vi.fn().mockReturnValue({
@@ -404,7 +415,7 @@ describe("GET /api/users/invites", () => {
         }),
       } as never);
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/users/invites"));
     expect(response.status).toBe(200);
 
     const body = await response.json();

@@ -24,7 +24,12 @@ vi.mock("@/db", () => ({
   },
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 import { GET } from "@/app/api/settings/telegram/bots/route";
+import { NextRequest } from "next/server";
 import { db } from "@/db";
 
 const adminSession = {
@@ -45,7 +50,7 @@ describe("GET /api/settings/telegram/bots", () => {
   it("returns 401 when not authenticated", async () => {
     mockGetSession.mockResolvedValueOnce(null);
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/settings/telegram/bots"));
     expect(response.status).toBe(401);
   });
 
@@ -55,7 +60,7 @@ describe("GET /api/settings/telegram/bots", () => {
     ] as any);
     mockGetSetting.mockResolvedValue(null);
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/settings/telegram/bots"));
     const data = await response.json();
 
     expect(response.status).toBe(200);
@@ -72,7 +77,7 @@ describe("GET /api/settings/telegram/bots", () => {
       return null;
     });
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/settings/telegram/bots"));
     const data = await response.json();
 
     expect(response.status).toBe(200);
@@ -93,7 +98,7 @@ describe("GET /api/settings/telegram/bots", () => {
       return null;
     });
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/settings/telegram/bots"));
     const data = await response.json();
 
     expect(data.bots).toEqual([
@@ -111,7 +116,7 @@ describe("GET /api/settings/telegram/bots", () => {
       return null;
     });
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/settings/telegram/bots"));
     const data = await response.json();
 
     expect(data.bots).toEqual([{ agentId: "a2", agentName: "My Bot", botUsername: "my_bot" }]);

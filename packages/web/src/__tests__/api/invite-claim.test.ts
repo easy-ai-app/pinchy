@@ -17,6 +17,10 @@ vi.mock("@/lib/openclaw-config", () => ({
   regenerateOpenClawConfig: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 vi.mock("@/lib/auth", () => ({
   getSession: vi.fn(),
   auth: {
@@ -38,6 +42,11 @@ vi.mock("@/db", () => ({
     }),
     insert: vi.fn().mockReturnValue({
       values: vi.fn().mockResolvedValue(undefined),
+    }),
+    select: vi.fn().mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([]), // tenant membership check returns empty (will insert)
+      }),
     }),
     query: {
       users: {
@@ -127,6 +136,7 @@ describe("POST /api/invite/claim", () => {
       expiresAt: new Date(Date.now() + 86400000),
       claimedAt: null,
       claimedByUserId: null,
+      tenantId: "default",
     });
 
     const request = makeRequest({ token: "valid-token", password: "password123" });
@@ -152,6 +162,7 @@ describe("POST /api/invite/claim", () => {
       expiresAt: new Date(Date.now() + 86400000),
       claimedAt: null,
       claimedByUserId: null,
+      tenantId: "default",
     });
 
     const request = makeRequest({
@@ -184,6 +195,7 @@ describe("POST /api/invite/claim", () => {
       expiresAt: new Date(Date.now() + 86400000),
       claimedAt: null,
       claimedByUserId: null,
+      tenantId: "default",
     });
 
     const request = makeRequest({
@@ -209,6 +221,7 @@ describe("POST /api/invite/claim", () => {
       expiresAt: new Date(Date.now() + 86400000),
       claimedAt: null,
       claimedByUserId: null,
+      tenantId: "default",
     });
 
     const request = makeRequest({
@@ -234,6 +247,7 @@ describe("POST /api/invite/claim", () => {
       expiresAt: new Date(Date.now() + 86400000),
       claimedAt: null,
       claimedByUserId: null,
+      tenantId: "default",
     });
 
     const request = makeRequest({
@@ -261,6 +275,7 @@ describe("POST /api/invite/claim", () => {
       expiresAt: new Date(Date.now() + 86400000),
       claimedAt: null,
       claimedByUserId: null,
+      tenantId: "default",
     });
 
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({
@@ -300,6 +315,7 @@ describe("POST /api/invite/claim", () => {
       expiresAt: new Date(Date.now() + 86400000),
       claimedAt: null,
       claimedByUserId: null,
+      tenantId: "default",
     });
 
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({
@@ -381,6 +397,7 @@ describe("POST /api/invite/claim", () => {
       expiresAt: new Date(Date.now() + 86400000),
       claimedAt: null,
       claimedByUserId: null,
+      tenantId: "default",
     });
 
     vi.mocked(getInviteGroupIds).mockResolvedValueOnce(["group-1", "group-2"]);
@@ -416,6 +433,7 @@ describe("POST /api/invite/claim", () => {
       expiresAt: new Date(Date.now() + 86400000),
       claimedAt: null,
       claimedByUserId: null,
+      tenantId: "default",
     });
 
     vi.mocked(db.query.users.findFirst).mockResolvedValueOnce({

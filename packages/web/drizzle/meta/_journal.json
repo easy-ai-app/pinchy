@@ -176,6 +176,13 @@
       "when": 1774900100000,
       "tag": "0024_multi_tenancy_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1774900200000,
+      "tag": "0025_multi_tenancy_fixes",
+      "breakpoints": true
     }
   ]
 }

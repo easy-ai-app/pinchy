@@ -8,12 +8,16 @@ import { db } from "@/db";
 import { agents } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { appendAuditLog } from "@/lib/audit";
+import { getTenantId } from "@/lib/tenant-context";
 
 const VALID_PROVIDERS: ProviderName[] = ["anthropic", "openai", "google", "zai"];
 
 export async function POST(request: NextRequest) {
   const sessionOrError = await requireAdmin();
   if (sessionOrError instanceof NextResponse) return sessionOrError;
+
+  // During initial setup the tenant may not exist yet — fall back to "default"
+  const tenantId = (await getTenantId(request, sessionOrError.user.id!)) ?? "default";
 
   const body = await request.json();
   const { provider, apiKey } = body;
@@ -55,7 +59,7 @@ export async function POST(request: NextRequest) {
   let isFirstProvider = true;
   for (const [name, providerConfig] of Object.entries(PROVIDERS)) {
     if (name !== provider) {
-      const existingKey = await getSetting(providerConfig.settingsKey);
+      const existingKey = await getSetting(providerConfig.settingsKey, tenantId);
       if (existingKey !== null) {
         isFirstProvider = false;
         break;
@@ -64,12 +68,14 @@ export async function POST(request: NextRequest) {
   }
 
   // Store encrypted key and default provider
-  await setSetting(config.settingsKey, apiKey, true);
-  await setSetting("default_provider", provider, false);
+  await setSetting(config.settingsKey, apiKey, true, tenantId);
+  await setSetting("default_provider", provider, false, tenantId);
 
   // Only update agent model when adding the first provider
   if (isFirstProvider) {
-    const smithers = await db.query.agents.findFirst();
+    const smithers = await db.query.agents.findFirst({
+      where: eq(agents.tenantId, tenantId),
+    });
     if (smithers) {
       await db.update(agents).set({ model: config.defaultModel }).where(eq(agents.id, smithers.id));
     }
@@ -84,6 +90,7 @@ export async function POST(request: NextRequest) {
     actorId: sessionOrError.user.id!,
     eventType: "config.changed",
     detail: { key: "provider", provider },
+    tenantId,
   }).catch(() => {});
 
   return NextResponse.json({ success: true });

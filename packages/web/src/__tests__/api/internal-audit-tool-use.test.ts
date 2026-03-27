@@ -9,6 +9,10 @@ vi.mock("@/lib/audit", () => ({
   appendAuditLog: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 import { validateGatewayToken } from "@/lib/gateway-auth";
 import { appendAuditLog } from "@/lib/audit";
 import { POST } from "@/app/api/internal/audit/tool-use/route";
@@ -154,6 +158,7 @@ describe("POST /api/internal/audit/tool-use", () => {
         durationMs: 123,
         source: "openclaw_hook",
       },
+      tenantId: "default",
     });
   });
 
@@ -180,6 +185,7 @@ describe("POST /api/internal/audit/tool-use", () => {
         result: "ok",
         source: "openclaw_hook",
       },
+      tenantId: "default",
     });
   });
 
@@ -206,6 +212,7 @@ describe("POST /api/internal/audit/tool-use", () => {
         result: "done",
         source: "openclaw_hook",
       },
+      tenantId: "default",
     });
   });
 

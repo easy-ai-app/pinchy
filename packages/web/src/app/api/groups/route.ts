@@ -5,13 +5,19 @@ import { db } from "@/db";
 import { groups, userGroups } from "@/db/schema";
 import { eq, count } from "drizzle-orm";
 import { appendAuditLog } from "@/lib/audit";
+import { getTenantId } from "@/lib/tenant-context";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const sessionOrError = await requireAdmin();
   if (sessionOrError instanceof NextResponse) return sessionOrError;
 
   if (!(await isEnterprise())) {
     return NextResponse.json({ error: "Enterprise feature" }, { status: 403 });
+  }
+
+  const tenantId = await getTenantId(request, sessionOrError.user.id!);
+  if (!tenantId) {
+    return NextResponse.json({ error: "No tenant context" }, { status: 400 });
   }
 
   const allGroups = await db
@@ -25,6 +31,7 @@ export async function GET() {
     })
     .from(groups)
     .leftJoin(userGroups, eq(groups.id, userGroups.groupId))
+    .where(eq(groups.tenantId, tenantId))
     .groupBy(groups.id);
 
   return NextResponse.json(allGroups);
@@ -39,6 +46,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Enterprise feature" }, { status: 403 });
   }
 
+  const tenantId = await getTenantId(request, session.user.id!);
+  if (!tenantId) {
+    return NextResponse.json({ error: "No tenant context" }, { status: 400 });
+  }
+
   const { name, description } = await request.json();
 
   if (!name || typeof name !== "string" || !name.trim()) {
@@ -50,7 +62,7 @@ export async function POST(request: NextRequest) {
     .values({
       name: name.trim(),
       description: description?.trim() || null,
-      tenantId: "default" /* TODO: resolve from request tenant context */,
+      tenantId,
     })
     .returning();
 
@@ -60,6 +72,7 @@ export async function POST(request: NextRequest) {
     eventType: "group.created",
     resource: `group:${group.id}`,
     detail: { name: group.name },
+    tenantId,
   }).catch(() => {});
 
   return NextResponse.json(group, { status: 201 });

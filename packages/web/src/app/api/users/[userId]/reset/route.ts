@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { createInvite } from "@/lib/invites";
+import { getTenantId } from "@/lib/tenant-context";
 
 export async function POST(
   request: NextRequest,
@@ -13,6 +14,11 @@ export async function POST(
   const sessionOrError = await requireAdmin();
   if (sessionOrError instanceof NextResponse) return sessionOrError;
   const session = sessionOrError;
+
+  const tenantId = await getTenantId(request, session.user.id);
+  if (!tenantId) {
+    return NextResponse.json({ error: "Tenant not found" }, { status: 400 });
+  }
 
   const { userId } = await params;
 
@@ -29,6 +35,7 @@ export async function POST(
     role: user.role,
     type: "reset",
     createdBy: session.user.id,
+    tenantId,
   });
 
   return NextResponse.json({ token: invite.token }, { status: 201 });

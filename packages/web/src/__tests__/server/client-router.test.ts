@@ -57,6 +57,15 @@ vi.mock("@/lib/enterprise", () => ({
 
 vi.mock("@/db", () => ({
   db: {
+    select: vi.fn().mockImplementation(() => ({
+      from: vi.fn().mockImplementation(() => ({
+        where: vi.fn().mockImplementation(async () => {
+          const result = mockFindFirst();
+          const resolved = result && typeof result.then === "function" ? await result : result;
+          return resolved ? [resolved] : [];
+        }),
+      })),
+    })),
     query: {
       agents: {
         findFirst: mockFindFirst,
@@ -69,12 +78,13 @@ vi.mock("@/db", () => ({
 }));
 
 vi.mock("@/db/schema", () => ({
-  agents: { id: "id" },
+  agents: { id: "id", tenantId: "tenant_id" },
   users: { id: "id" },
 }));
 
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn((col, val) => ({ col, val })),
+  and: vi.fn((...args) => args),
 }));
 
 vi.mock("@/lib/audit", () => ({
@@ -996,6 +1006,7 @@ describe("ClientRouter", () => {
       eventType: "tool.denied",
       resource: "agent:agent-1",
       detail: { reason: "access_denied" },
+      tenantId: "default",
     });
   });
 

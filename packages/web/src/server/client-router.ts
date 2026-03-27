@@ -8,7 +8,7 @@ import { recordUsage } from "@/lib/usage";
 import { SessionCache } from "@/server/session-cache";
 import { db } from "@/db";
 import { agents, users } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
 const WS_OPEN = 1;
 const CONNECTION_TIMEOUT_MS = 10_000;
@@ -36,7 +36,8 @@ export class ClientRouter {
     private openclawClient: OpenClawClient,
     private userId: string,
     private userRole: string,
-    private sessionCache: SessionCache
+    private sessionCache: SessionCache,
+    private tenantId: string = "default"
   ) {}
 
   private computeSessionKey(agentId: string): string {
@@ -44,10 +45,11 @@ export class ClientRouter {
   }
 
   async handleMessage(clientWs: WebSocket, message: BrowserMessage): Promise<void> {
-    // Look up agent and check access
-    const agent = await db.query.agents.findFirst({
-      where: eq(agents.id, message.agentId),
-    });
+    // Look up agent scoped to the current tenant
+    const [agent] = await db
+      .select()
+      .from(agents)
+      .where(and(eq(agents.id, message.agentId), eq(agents.tenantId, this.tenantId)));
 
     if (!agent) {
       this.sendToClient(clientWs, { type: "error", message: "Agent not found" });
@@ -72,6 +74,7 @@ export class ClientRouter {
         eventType: "tool.denied",
         resource: `agent:${message.agentId}`,
         detail: { reason: "access_denied" },
+        tenantId: this.tenantId,
       }).catch((err) => {
         console.error("Failed to write audit log for tool.denied:", err);
       });
@@ -185,6 +188,7 @@ export class ClientRouter {
             agentId: message.agentId,
             agentName: agent.name,
             sessionKey,
+            tenantId: this.tenantId,
           }).catch((err) => {
             console.error("Usage tracking failed:", err);
           });
@@ -258,7 +262,7 @@ export class ClientRouter {
         const greetingMessages = greeting ? [{ role: "assistant", content: greeting }] : [];
         this.sendToClient(clientWs, { type: "history", messages: greetingMessages });
       }
-    } catch (err) {
+    } catch (_err) {
       // If history fetch fails (e.g. session doesn't exist), fall back to greeting
       const greeting = await this.getPersonalizedGreeting(agent.greetingMessage);
       const greetingMessages = greeting ? [{ role: "assistant", content: greeting }] : [];

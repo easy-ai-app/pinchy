@@ -3,11 +3,15 @@ import { requireAdmin } from "@/lib/api-auth";
 import { isEnterprise } from "@/lib/enterprise";
 import { db } from "@/db";
 import { groups, userGroups, users } from "@/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { appendAuditLog } from "@/lib/audit";
+import { getTenantId } from "@/lib/tenant-context";
 
-async function groupExists(groupId: string): Promise<boolean> {
-  const rows = await db.select({ id: groups.id }).from(groups).where(eq(groups.id, groupId));
+async function groupExistsInTenant(groupId: string, tenantId: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: groups.id })
+    .from(groups)
+    .where(and(eq(groups.id, groupId), eq(groups.tenantId, tenantId)));
   return rows.length > 0;
 }
 
@@ -22,9 +26,14 @@ export async function GET(
     return NextResponse.json({ error: "Enterprise feature" }, { status: 403 });
   }
 
+  const tenantId = await getTenantId(request, sessionOrError.user.id!);
+  if (!tenantId) {
+    return NextResponse.json({ error: "No tenant context" }, { status: 400 });
+  }
+
   const { groupId } = await params;
 
-  if (!(await groupExists(groupId))) {
+  if (!(await groupExistsInTenant(groupId, tenantId))) {
     return NextResponse.json({ error: "Group not found" }, { status: 404 });
   }
 
@@ -48,6 +57,11 @@ export async function PUT(
     return NextResponse.json({ error: "Enterprise feature" }, { status: 403 });
   }
 
+  const tenantId = await getTenantId(request, session.user.id!);
+  if (!tenantId) {
+    return NextResponse.json({ error: "No tenant context" }, { status: 400 });
+  }
+
   const { groupId } = await params;
   const { userIds } = await request.json();
 
@@ -59,7 +73,7 @@ export async function PUT(
     return NextResponse.json({ error: "userIds must be an array of strings" }, { status: 400 });
   }
 
-  if (!(await groupExists(groupId))) {
+  if (!(await groupExistsInTenant(groupId, tenantId))) {
     return NextResponse.json({ error: "Group not found" }, { status: 404 });
   }
 
@@ -101,6 +115,7 @@ export async function PUT(
       removed: removedIds.map((id) => ({ id, name: nameMap.get(id) ?? id })),
       memberCount: userIds.length,
     },
+    tenantId,
   }).catch(() => {});
 
   return NextResponse.json({ success: true });

@@ -1,22 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
-import { eq, or, asc, desc } from "drizzle-orm";
+import { eq, and, or, asc, desc } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 import { db } from "@/db";
 import { skills } from "@/db/schema";
+import { getTenantId } from "@/lib/tenant-context";
 
 // audit-exempt: skills are personal user data, not admin actions
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await getSession({ headers: await headers() });
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const tenantId = await getTenantId(request, session.user.id!);
+  if (!tenantId) {
+    return NextResponse.json({ error: "No tenant context" }, { status: 400 });
+  }
+
   const userSkills = await db
     .select()
     .from(skills)
-    .where(or(eq(skills.userId, session.user.id!), eq(skills.isShared, true)))
+    .where(
+      and(
+        eq(skills.tenantId, tenantId),
+        or(eq(skills.userId, session.user.id!), eq(skills.isShared, true))
+      )
+    )
     .orderBy(asc(skills.isShared), asc(skills.sortOrder), desc(skills.createdAt));
 
   return NextResponse.json(userSkills);
@@ -26,6 +37,11 @@ export async function POST(request: NextRequest) {
   const session = await getSession({ headers: await headers() });
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const tenantId = await getTenantId(request, session.user.id!);
+  if (!tenantId) {
+    return NextResponse.json({ error: "No tenant context" }, { status: 400 });
   }
 
   const body = await request.json();
@@ -47,7 +63,7 @@ export async function POST(request: NextRequest) {
       prompt: prompt.trim(),
       icon: icon?.trim() || null,
       userId: session.user.id!,
-      tenantId: "default", // TODO: resolve from request tenant context
+      tenantId,
     })
     .returning();
 

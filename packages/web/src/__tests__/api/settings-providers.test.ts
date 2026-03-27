@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { NextRequest } from "next/server";
 import { GET, DELETE } from "@/app/api/settings/providers/route";
 
 vi.mock("next/headers", () => ({
@@ -59,6 +60,10 @@ vi.mock("@/lib/provider-models", () => ({
   resetCache: vi.fn(),
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 vi.mock("@/db", () => ({
   db: {
     query: {
@@ -95,7 +100,7 @@ describe("GET /api/settings/providers", () => {
   it("should return 401 when not authenticated", async () => {
     vi.mocked(auth.api.getSession).mockResolvedValueOnce(null);
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/settings/providers"));
 
     expect(response.status).toBe(401);
     const data = await response.json();
@@ -103,7 +108,7 @@ describe("GET /api/settings/providers", () => {
   });
 
   it("should return all providers as not configured when nothing is set", async () => {
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/settings/providers"));
 
     expect(response.status).toBe(200);
     const data = await response.json();
@@ -123,7 +128,7 @@ describe("GET /api/settings/providers", () => {
       return null;
     });
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/settings/providers"));
 
     expect(response.status).toBe(200);
     const data = await response.json();
@@ -138,7 +143,7 @@ describe("GET /api/settings/providers", () => {
       return null;
     });
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/settings/providers"));
     const data = await response.json();
 
     expect(data.providers.anthropic.hint).toBe("xY9z");
@@ -155,7 +160,7 @@ describe("GET /api/settings/providers", () => {
       return null;
     });
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/settings/providers"));
 
     expect(response.status).toBe(200);
     const data = await response.json();
@@ -170,7 +175,7 @@ describe("GET /api/settings/providers", () => {
       return null;
     });
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/settings/providers"));
 
     expect(response.status).toBe(200);
     const data = await response.json();
@@ -245,7 +250,7 @@ describe("DELETE /api/settings/providers", () => {
     const response = await DELETE(makeRequest({ provider: "anthropic" }));
 
     expect(response.status).toBe(200);
-    expect(deleteSetting).toHaveBeenCalledWith("anthropic_api_key");
+    expect(deleteSetting).toHaveBeenCalledWith("anthropic_api_key", "default");
   });
 
   it("should switch default_provider when deleting the current default", async () => {
@@ -259,8 +264,8 @@ describe("DELETE /api/settings/providers", () => {
     const response = await DELETE(makeRequest({ provider: "anthropic" }));
 
     expect(response.status).toBe(200);
-    expect(deleteSetting).toHaveBeenCalledWith("anthropic_api_key");
-    expect(setSetting).toHaveBeenCalledWith("default_provider", "openai", false);
+    expect(deleteSetting).toHaveBeenCalledWith("anthropic_api_key", "default");
+    expect(setSetting).toHaveBeenCalledWith("default_provider", "openai", false, "default");
   });
 
   it("should not change default_provider when deleting a non-default provider", async () => {
@@ -274,7 +279,7 @@ describe("DELETE /api/settings/providers", () => {
     const response = await DELETE(makeRequest({ provider: "openai" }));
 
     expect(response.status).toBe(200);
-    expect(deleteSetting).toHaveBeenCalledWith("openai_api_key");
+    expect(deleteSetting).toHaveBeenCalledWith("openai_api_key", "default");
     expect(setSetting).not.toHaveBeenCalled();
   });
 

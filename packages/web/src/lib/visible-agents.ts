@@ -1,17 +1,18 @@
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { activeAgents } from "@/db/schema";
 import { getUserGroupIds, getAllAgentGroupIds } from "@/lib/groups";
 import { isEnterprise } from "@/lib/enterprise";
 import { effectiveVisibility } from "@/lib/agent-access";
 
-export async function getVisibleAgents(userId: string, userRole: string) {
+export async function getVisibleAgents(userId: string, userRole: string, tenantId: string) {
   const isAdmin = userRole === "admin";
   const enterprise = await isEnterprise();
   const needsGroups = !isAdmin && enterprise;
 
   const [userGroupIds, allAgents, agentGroupMap] = await Promise.all([
     needsGroups ? getUserGroupIds(userId) : Promise.resolve([]),
-    db.select().from(activeAgents),
+    db.select().from(activeAgents).where(eq(activeAgents.tenantId, tenantId)),
     needsGroups ? getAllAgentGroupIds() : Promise.resolve(new Map<string, string[]>()),
   ]);
 

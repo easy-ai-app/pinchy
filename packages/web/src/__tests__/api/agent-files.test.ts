@@ -22,6 +22,10 @@ vi.mock("@/lib/workspace", () => ({
   writeWorkspaceFile: vi.fn(),
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 const { mockAssertAgentWriteAccess } = vi.hoisted(() => ({
   mockAssertAgentWriteAccess: vi.fn(),
 }));

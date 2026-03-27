@@ -133,6 +133,10 @@ vi.mock("@/lib/visible-agents", () => ({
   getVisibleAgents: vi.fn().mockResolvedValue([]),
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 import { auth } from "@/lib/auth";
 import { appendAuditLog } from "@/lib/audit";
 import { deleteAgent, updateAgent } from "@/lib/agents";
@@ -186,6 +190,7 @@ describe("POST /api/agents audit logging", () => {
         model: "anthropic/claude-haiku-4-5-20251001",
         templateId: "custom",
       },
+      tenantId: "default",
     });
   });
 });
@@ -243,6 +248,7 @@ describe("PATCH /api/agents/[agentId] audit logging", () => {
           model: { from: "anthropic/claude-sonnet-4-20250514", to: "anthropic/claude-opus-4-6" },
         },
       },
+      tenantId: "default",
     });
   });
 
@@ -340,6 +346,7 @@ describe("PATCH /api/agents/[agentId] audit logging", () => {
           removed: [{ id: "group-old", name: "Old Group" }],
         },
       },
+      tenantId: "default",
     });
   });
 });
@@ -387,6 +394,7 @@ describe("DELETE /api/agents/[agentId] audit logging", () => {
       eventType: "agent.deleted",
       resource: "agent:agent-1",
       detail: { name: "Shared Agent" },
+      tenantId: "default",
     });
   });
 });

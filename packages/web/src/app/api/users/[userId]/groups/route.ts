@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api-auth";
 import { isEnterprise } from "@/lib/enterprise";
 import { db } from "@/db";
-import { users, groups, userGroups } from "@/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { users, groups, userGroups, tenantMembers } from "@/db/schema";
+import { eq, and, inArray } from "drizzle-orm";
 import { appendAuditLog } from "@/lib/audit";
+import { getTenantId } from "@/lib/tenant-context";
 
 export async function PUT(
   request: NextRequest,
@@ -18,6 +19,11 @@ export async function PUT(
     return NextResponse.json({ error: "Enterprise feature" }, { status: 403 });
   }
 
+  const tenantId = await getTenantId(request, session.user.id);
+  if (!tenantId) {
+    return NextResponse.json({ error: "Tenant not found" }, { status: 400 });
+  }
+
   const { userId } = await params;
   const { groupIds } = await request.json();
 
@@ -27,6 +33,16 @@ export async function PUT(
 
   if (!groupIds.every((id) => typeof id === "string")) {
     return NextResponse.json({ error: "groupIds must be an array of strings" }, { status: 400 });
+  }
+
+  // Verify target user is a member of this tenant
+  const [membership] = await db
+    .select({ userId: tenantMembers.userId })
+    .from(tenantMembers)
+    .where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, userId)));
+
+  if (!membership) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
   // 1. Fetch user (verify exists, get name for audit)
@@ -90,6 +106,7 @@ export async function PUT(
       removed,
       memberCount: groupIds.length,
     },
+    tenantId,
   }).catch(() => {});
 
   return NextResponse.json({ success: true });

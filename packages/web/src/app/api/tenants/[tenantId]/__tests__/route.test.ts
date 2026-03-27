@@ -65,6 +65,7 @@ vi.mock("@/db", () => ({
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn((...args: unknown[]) => ({ type: "eq", args })),
   and: vi.fn((...args: unknown[]) => ({ type: "and", args })),
+  isNull: vi.fn((col: unknown) => ({ type: "isNull", col })),
   count: vi.fn().mockReturnValue("count"),
 }));
 

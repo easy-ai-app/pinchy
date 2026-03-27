@@ -9,6 +9,10 @@ vi.mock("@/lib/settings", () => ({
   setSetting: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 vi.mock("@/lib/context-sync", () => ({
   syncOrgContextToWorkspaces: vi.fn().mockResolvedValue(undefined),
 }));
@@ -46,7 +50,7 @@ describe("PUT /api/internal/settings/context", () => {
     const res = await PUT(makePutRequest({ content: "# Org Info" }));
 
     expect(res.status).toBe(200);
-    expect(setSetting).toHaveBeenCalledWith("org_context", "# Org Info");
+    expect(setSetting).toHaveBeenCalledWith("org_context", "# Org Info", false, "default");
     expect(syncOrgContextToWorkspaces).toHaveBeenCalled();
   });
 

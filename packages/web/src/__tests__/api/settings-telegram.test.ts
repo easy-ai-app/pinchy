@@ -53,8 +53,13 @@ vi.mock("drizzle-orm", async (importOriginal) => {
   };
 });
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 // ── Import route handlers ────────────────────────────────────────────────
 
+import { NextRequest } from "next/server";
 import { GET, POST, DELETE } from "@/app/api/settings/telegram/route";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -82,7 +87,7 @@ describe("GET /api/settings/telegram", () => {
   it("returns 401 when unauthenticated", async () => {
     mockGetSession.mockResolvedValueOnce(null);
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/settings/telegram"));
     expect(response.status).toBe(401);
   });
 
@@ -93,7 +98,7 @@ describe("GET /api/settings/telegram", () => {
       channelUserId: "8734062810",
     });
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/settings/telegram"));
     expect(response.status).toBe(200);
     const data = await response.json();
     expect(data).toEqual({ linked: true, channelUserId: "8734062810" });
@@ -102,7 +107,7 @@ describe("GET /api/settings/telegram", () => {
   it("returns not linked when no link exists", async () => {
     mockFindFirst.mockResolvedValueOnce(undefined);
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/settings/telegram"));
     expect(response.status).toBe(200);
     const data = await response.json();
     expect(data).toEqual({ linked: false, channelUserId: null });
@@ -190,12 +195,12 @@ describe("DELETE /api/settings/telegram", () => {
   it("returns 401 when unauthenticated", async () => {
     mockGetSession.mockResolvedValueOnce(null);
 
-    const response = await DELETE();
+    const response = await DELETE(new NextRequest("http://localhost/api/settings/telegram"));
     expect(response.status).toBe(401);
   });
 
   it("removes link from DB, updates allow store, and regenerates config", async () => {
-    const response = await DELETE();
+    const response = await DELETE(new NextRequest("http://localhost/api/settings/telegram"));
     expect(response.status).toBe(200);
 
     const data = await response.json();

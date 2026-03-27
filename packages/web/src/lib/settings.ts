@@ -1,18 +1,23 @@
 import { db } from "@/db";
 import { settings } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { encrypt, decrypt } from "@/lib/encryption";
 
-export async function getSetting(key: string): Promise<string | null> {
+export async function getSetting(key: string, tenantId = "default"): Promise<string | null> {
   const row = await db.query.settings.findFirst({
-    where: eq(settings.key, key),
+    where: and(eq(settings.key, key), eq(settings.tenantId, tenantId)),
   });
   if (!row) return null;
 
   return row.encrypted ? decrypt(row.value) : row.value;
 }
 
-export async function setSetting(key: string, value: string, encrypted = false) {
+export async function setSetting(
+  key: string,
+  value: string,
+  encrypted = false,
+  tenantId = "default"
+) {
   const storedValue = encrypted ? encrypt(value) : value;
   await db
     .insert(settings)
@@ -20,18 +25,18 @@ export async function setSetting(key: string, value: string, encrypted = false) 
       key,
       value: storedValue,
       encrypted,
-      tenantId: "default" /* TODO: resolve from request tenant context */,
+      tenantId,
     })
     .onConflictDoUpdate({
-      target: settings.key,
+      target: [settings.tenantId, settings.key],
       set: { value: storedValue, encrypted },
     });
 }
 
-export async function deleteSetting(key: string): Promise<void> {
-  await db.delete(settings).where(eq(settings.key, key));
+export async function deleteSetting(key: string, tenantId = "default"): Promise<void> {
+  await db.delete(settings).where(and(eq(settings.key, key), eq(settings.tenantId, tenantId)));
 }
 
-export async function getAllSettings() {
-  return db.select().from(settings);
+export async function getAllSettings(tenantId = "default") {
+  return db.select().from(settings).where(eq(settings.tenantId, tenantId));
 }

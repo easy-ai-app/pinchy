@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { activeAgents } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { getUserGroupIds, getAgentGroupIds } from "@/lib/groups";
 import { isEnterprise } from "@/lib/enterprise";
 
@@ -79,8 +79,20 @@ export function assertAgentWriteAccess(
   throw new Error("Access denied");
 }
 
-export async function getAgentWithAccess(agentId: string, userId: string, userRole: string) {
-  const rows = await db.select().from(activeAgents).where(eq(activeAgents.id, agentId));
+export async function getAgentWithAccess(
+  agentId: string,
+  userId: string,
+  userRole: string,
+  tenantId?: string
+) {
+  const rows = await db
+    .select()
+    .from(activeAgents)
+    .where(
+      tenantId
+        ? and(eq(activeAgents.id, agentId), eq(activeAgents.tenantId, tenantId))
+        : eq(activeAgents.id, agentId)
+    );
   const agent = rows[0];
 
   if (!agent) {

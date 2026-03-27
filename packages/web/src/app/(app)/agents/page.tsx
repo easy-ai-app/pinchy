@@ -11,7 +11,7 @@ export default async function AgentsPage() {
   const userId = session?.user?.id;
   const userRole = session?.user?.role ?? "member";
 
-  const visibleAgents = await getVisibleAgents(userId!, userRole);
+  const visibleAgents = await getVisibleAgents(userId!, userRole, "default");
 
   const headerStore = await headers();
   const userAgent = headerStore.get("user-agent") ?? "";

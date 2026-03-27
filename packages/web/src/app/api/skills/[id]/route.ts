@@ -4,25 +4,30 @@ import { eq, and } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 import { db } from "@/db";
 import { skills } from "@/db/schema";
+import { getTenantId } from "@/lib/tenant-context";
 
 // audit-exempt: skills are personal user data, not admin actions
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession({ headers: await headers() });
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const tenantId = await getTenantId(request, session.user.id!);
+  if (!tenantId) {
+    return NextResponse.json({ error: "No tenant context" }, { status: 400 });
+  }
+
   const { id } = await params;
 
-  // Verify ownership
+  // Verify ownership and tenant
   const [existing] = await db
     .select()
     .from(skills)
-    .where(and(eq(skills.id, id), eq(skills.userId, session.user.id!)));
+    .where(
+      and(eq(skills.id, id), eq(skills.userId, session.user.id!), eq(skills.tenantId, tenantId))
+    );
 
   if (!existing) {
     return NextResponse.json({ error: "Skill not found" }, { status: 404 });
@@ -56,14 +61,16 @@ export async function PUT(
   const [updated] = await db
     .update(skills)
     .set(data)
-    .where(and(eq(skills.id, id), eq(skills.userId, session.user.id!)))
+    .where(
+      and(eq(skills.id, id), eq(skills.userId, session.user.id!), eq(skills.tenantId, tenantId))
+    )
     .returning();
 
   return NextResponse.json(updated);
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession({ headers: await headers() });
@@ -71,13 +78,20 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const tenantId = await getTenantId(request, session.user.id!);
+  if (!tenantId) {
+    return NextResponse.json({ error: "No tenant context" }, { status: 400 });
+  }
+
   const { id } = await params;
 
-  // Verify ownership
+  // Verify ownership and tenant
   const [existing] = await db
     .select()
     .from(skills)
-    .where(and(eq(skills.id, id), eq(skills.userId, session.user.id!)));
+    .where(
+      and(eq(skills.id, id), eq(skills.userId, session.user.id!), eq(skills.tenantId, tenantId))
+    );
 
   if (!existing) {
     return NextResponse.json({ error: "Skill not found" }, { status: 404 });
@@ -85,7 +99,9 @@ export async function DELETE(
 
   await db
     .delete(skills)
-    .where(and(eq(skills.id, id), eq(skills.userId, session.user.id!)));
+    .where(
+      and(eq(skills.id, id), eq(skills.userId, session.user.id!), eq(skills.tenantId, tenantId))
+    );
 
   return NextResponse.json({ success: true });
 }

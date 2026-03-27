@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
@@ -55,6 +55,10 @@ vi.mock("@/lib/providers", () => ({
 vi.mock("@/lib/openclaw-config", () => ({
   writeOpenClawConfig: vi.fn(),
   regenerateOpenClawConfig: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
 }));
 
 vi.mock("@/lib/workspace", () => ({
@@ -139,6 +143,7 @@ describe("audit: POST /api/users/invite", () => {
       actorId: "admin-1",
       eventType: "user.invited",
       detail: { email: "newuser@test.com", role: "member" },
+      tenantId: "default",
     });
   });
 
@@ -171,6 +176,13 @@ describe("audit: DELETE /api/users/[userId]", () => {
   });
 
   it("logs user.deleted audit event on successful deletion", async () => {
+    // Mock: tenant membership check
+    vi.mocked(db.select).mockReturnValueOnce({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([{ userId: "user-1" }]),
+      }),
+    } as never);
+
     // Mock: select personal agents returns empty
     vi.mocked(db.select).mockReturnValueOnce({
       from: vi.fn().mockReturnValue({
@@ -198,23 +210,16 @@ describe("audit: DELETE /api/users/[userId]", () => {
       actorId: "admin-1",
       eventType: "user.deleted",
       resource: "user:user-1",
-      detail: { email: "deleted@test.com" },
+      detail: expect.objectContaining({ email: "deleted@test.com" }),
+      tenantId: "default",
     });
   });
 
-  it("does not log audit event when user not found", async () => {
-    // Mock: select personal agents returns empty
+  it("does not log audit event when user not found (no tenant membership)", async () => {
+    // Mock: tenant membership check returns empty
     vi.mocked(db.select).mockReturnValueOnce({
       from: vi.fn().mockReturnValue({
         where: vi.fn().mockResolvedValue([]),
-      }),
-    } as never);
-
-    // Mock: update returns empty (user not found)
-    vi.mocked(db.update).mockReturnValueOnce({
-      set: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnValue({
-        returning: vi.fn().mockResolvedValue([]),
       }),
     } as never);
 
@@ -263,6 +268,7 @@ describe("audit: POST /api/setup/provider", () => {
       actorId: "admin-1",
       eventType: "config.changed",
       detail: { key: "provider", provider: "anthropic" },
+      tenantId: "default",
     });
   });
 
@@ -310,6 +316,7 @@ describe("audit: POST /api/settings", () => {
       actorId: "admin-1",
       eventType: "config.changed",
       detail: { key: "default_provider" },
+      tenantId: "default",
     });
   });
 });

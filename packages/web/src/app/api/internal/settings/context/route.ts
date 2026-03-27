@@ -15,7 +15,10 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "content must be a string" }, { status: 400 });
   }
 
-  await setSetting("org_context", content);
+  // TODO: resolve tenantId from gateway token or request context once per-tenant OpenClaw containers land
+  const tenantId = "default";
+
+  await setSetting("org_context", content, false, tenantId);
   await syncOrgContextToWorkspaces();
 
   return NextResponse.json({ success: true, onboardingComplete: true });

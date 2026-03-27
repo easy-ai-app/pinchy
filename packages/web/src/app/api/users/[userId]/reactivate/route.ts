@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { appendAuditLog } from "@/lib/audit";
+import { getTenantId } from "@/lib/tenant-context";
 
 export async function POST(
   request: NextRequest,
@@ -12,6 +13,11 @@ export async function POST(
   const sessionOrError = await requireAdmin();
   if (sessionOrError instanceof NextResponse) return sessionOrError;
   const session = sessionOrError;
+
+  const tenantId = await getTenantId(request, session.user.id);
+  if (!tenantId) {
+    return NextResponse.json({ error: "Tenant not found" }, { status: 400 });
+  }
 
   const { userId } = await params;
 
@@ -31,6 +37,7 @@ export async function POST(
     eventType: "user.updated",
     resource: `user:${userId}`,
     detail: { changes: { status: { from: "deactivated", to: "active" } } },
+    tenantId,
   }).catch(() => {});
 
   return NextResponse.json({ success: true });

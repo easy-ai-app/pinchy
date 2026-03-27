@@ -31,6 +31,10 @@ vi.mock("@/lib/audit", () => ({
   appendAuditLog: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 vi.mock("@/db", () => ({
   db: {
     select: vi.fn().mockReturnValue({
@@ -74,7 +78,7 @@ describe("GET /api/users", () => {
   it("returns 401 when not authenticated", async () => {
     vi.mocked(auth.api.getSession).mockResolvedValueOnce(null);
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/users"));
     expect(response.status).toBe(401);
 
     const body = await response.json();
@@ -87,7 +91,7 @@ describe("GET /api/users", () => {
       expires: "",
     } as any);
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/users"));
     expect(response.status).toBe(403);
 
     const body = await response.json();
@@ -105,9 +109,11 @@ describe("GET /api/users", () => {
       { id: "admin-1", name: "Bob", email: "bob@test.com", role: "admin" },
     ];
 
-    // First select: users
+    // First select: users joined with tenantMembers
     vi.mocked(db.select).mockReturnValueOnce({
-      from: vi.fn().mockResolvedValueOnce(fakeUsers),
+      from: vi.fn().mockReturnValue({
+        innerJoin: vi.fn().mockResolvedValue(fakeUsers),
+      }),
     } as never);
 
     // Second select: userGroups join groups
@@ -117,7 +123,7 @@ describe("GET /api/users", () => {
       }),
     } as never);
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/users"));
     expect(response.status).toBe(200);
 
     const body = await response.json();
@@ -147,9 +153,11 @@ describe("GET /api/users", () => {
       },
     ];
 
-    // First select: users
+    // First select: users joined with tenantMembers
     vi.mocked(db.select).mockReturnValueOnce({
-      from: vi.fn().mockResolvedValueOnce(fakeUsers),
+      from: vi.fn().mockReturnValue({
+        innerJoin: vi.fn().mockResolvedValue(fakeUsers),
+      }),
     } as never);
 
     // Second select: userGroups join groups
@@ -159,7 +167,7 @@ describe("GET /api/users", () => {
       }),
     } as never);
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/users"));
     expect(response.status).toBe(200);
 
     const body = await response.json();
@@ -239,6 +247,13 @@ describe("DELETE /api/users/[userId]", () => {
       expires: "",
     } as never);
 
+    // Mock: tenant membership check
+    vi.mocked(db.select).mockReturnValueOnce({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([{ userId: "user-1" }]),
+      }),
+    } as never);
+
     // Mock: select personal agents returns empty
     vi.mocked(db.select).mockReturnValueOnce({
       from: vi.fn().mockReturnValue({
@@ -269,24 +284,16 @@ describe("DELETE /api/users/[userId]", () => {
     );
   });
 
-  it("returns 404 when user not found", async () => {
+  it("returns 404 when user not found (no tenant membership)", async () => {
     vi.mocked(auth.api.getSession).mockResolvedValueOnce({
       user: { id: "admin-1", role: "admin" },
       expires: "",
     } as any);
 
-    // Mock: select personal agents returns empty
+    // Mock: tenant membership check returns empty
     vi.mocked(db.select).mockReturnValueOnce({
       from: vi.fn().mockReturnValue({
         where: vi.fn().mockResolvedValue([]),
-      }),
-    } as never);
-
-    // Mock: update returns empty (user not found)
-    vi.mocked(db.update).mockReturnValueOnce({
-      set: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnValue({
-        returning: vi.fn().mockResolvedValue([]),
       }),
     } as never);
 
@@ -308,6 +315,13 @@ describe("DELETE /api/users/[userId]", () => {
       user: { id: "admin-1", role: "admin" },
       expires: "",
     } as any);
+
+    // Mock: tenant membership check
+    vi.mocked(db.select).mockReturnValueOnce({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([{ userId: "user-1" }]),
+      }),
+    } as never);
 
     // Mock: select personal agents returns one agent
     vi.mocked(db.select).mockReturnValueOnce({
@@ -348,6 +362,13 @@ describe("DELETE /api/users/[userId]", () => {
       user: { id: "admin-1", role: "admin" },
       expires: "",
     } as any);
+
+    // Mock: tenant membership check
+    vi.mocked(db.select).mockReturnValueOnce({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([{ userId: "user-1" }]),
+      }),
+    } as never);
 
     // Mock: select personal agents returns two agents
     vi.mocked(db.select).mockReturnValueOnce({
@@ -394,6 +415,13 @@ describe("DELETE /api/users/[userId]", () => {
       user: { id: "admin-1", role: "admin" },
       expires: "",
     } as any);
+
+    // Mock: tenant membership check
+    vi.mocked(db.select).mockReturnValueOnce({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([{ userId: "user-1" }]),
+      }),
+    } as never);
 
     // Mock: select personal agents returns one agent
     vi.mocked(db.select).mockReturnValueOnce({

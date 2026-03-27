@@ -36,6 +36,10 @@ vi.mock("@/lib/agents", () => ({
   regenerateOpenClawConfig: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 const mockUpdateReturning = vi.fn();
 const mockUpdateWhere = vi.fn().mockReturnValue({ returning: mockUpdateReturning });
 const mockUpdateSet = vi.fn().mockReturnValue({ where: mockUpdateWhere });
@@ -121,13 +125,13 @@ describe("PATCH /api/users/[userId]", () => {
     expect(body.error).toContain("own role");
   });
 
-  it("returns 404 when user not found", async () => {
+  it("returns 404 when user not found (no tenant membership)", async () => {
     vi.mocked(auth.api.getSession).mockResolvedValueOnce({
       user: { id: "admin-1", role: "admin" },
       expires: "",
     } as any);
 
-    // User lookup returns empty
+    // Tenant membership check returns empty
     mockSelectWhere.mockResolvedValueOnce([]);
 
     const request = new NextRequest("http://localhost:7777/api/users/nonexistent", {
@@ -146,6 +150,9 @@ describe("PATCH /api/users/[userId]", () => {
       user: { id: "admin-1", role: "admin" },
       expires: "",
     } as any);
+
+    // Tenant membership check
+    mockSelectWhere.mockResolvedValueOnce([{ userId: "admin-2" }]);
 
     // User lookup: target is an admin
     mockSelectWhere.mockResolvedValueOnce([{ id: "admin-2", name: "Other Admin", role: "admin" }]);
@@ -171,6 +178,9 @@ describe("PATCH /api/users/[userId]", () => {
       user: { id: "admin-1", role: "admin" },
       expires: "",
     } as any);
+
+    // Tenant membership check
+    mockSelectWhere.mockResolvedValueOnce([{ userId: "user-1" }]);
 
     // User lookup
     mockSelectWhere.mockResolvedValueOnce([{ id: "user-1", name: "Max", role: "member" }]);

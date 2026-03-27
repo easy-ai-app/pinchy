@@ -30,6 +30,10 @@ vi.mock("@/lib/context-sync", () => ({
   syncOrgContextToWorkspaces: (...args: unknown[]) => mockSyncOrgContextToWorkspaces(...args),
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 import { auth } from "@/lib/auth";
 import { GET, PUT } from "@/app/api/settings/context/route";
 import { NextRequest } from "next/server";
@@ -79,7 +83,7 @@ describe("GET /api/settings/context", () => {
     expect(response.status).toBe(200);
     const data = await response.json();
     expect(data.content).toBe("Organization context");
-    expect(mockGetSetting).toHaveBeenCalledWith("org_context");
+    expect(mockGetSetting).toHaveBeenCalledWith("org_context", "default");
   });
 
   it("should return empty string when not set", async () => {
@@ -124,7 +128,7 @@ describe("PUT /api/settings/context", () => {
     expect(response.status).toBe(200);
     const data = await response.json();
     expect(data.success).toBe(true);
-    expect(mockSetSetting).toHaveBeenCalledWith("org_context", "New org context");
+    expect(mockSetSetting).toHaveBeenCalledWith("org_context", "New org context", false, "default");
   });
 
   it("should call syncOrgContextToWorkspaces", async () => {

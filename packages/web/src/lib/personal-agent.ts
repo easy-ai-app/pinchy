@@ -18,6 +18,7 @@ interface CreateSmithersOptions {
   ownerId: string | null;
   isPersonal: boolean;
   isAdmin?: boolean;
+  tenantId?: string;
 }
 
 export async function createSmithersAgent({
@@ -25,6 +26,7 @@ export async function createSmithersAgent({
   ownerId,
   isPersonal,
   isAdmin = false,
+  tenantId = "default",
 }: CreateSmithersOptions) {
   const allowedTools = isAdmin
     ? ["pinchy_save_user_context", "pinchy_save_org_context"]
@@ -36,7 +38,7 @@ export async function createSmithersAgent({
       name: "Smithers",
       model,
       ownerId,
-      tenantId: "default", // TODO: resolve from caller context when tenant switching is wired up
+      tenantId,
       isPersonal,
       tagline: "Your reliable personal assistant",
       avatarSeed: "__smithers__",
@@ -63,7 +65,7 @@ export async function createSmithersAgent({
   return agent;
 }
 
-export async function seedPersonalAgent(userId: string, isAdmin = false) {
+export async function seedPersonalAgent(userId: string, isAdmin = false, tenantId = "default") {
   const existing = await db.query.agents.findFirst({
     where: (a, { and, eq }) => and(eq(a.ownerId, userId), eq(a.isPersonal, true)),
   });
@@ -74,5 +76,5 @@ export async function seedPersonalAgent(userId: string, isAdmin = false) {
     ? await getDefaultModel(defaultProvider)
     : "anthropic/claude-sonnet-4-20250514";
 
-  return createSmithersAgent({ model, ownerId: userId, isPersonal: true, isAdmin });
+  return createSmithersAgent({ model, ownerId: userId, isPersonal: true, isAdmin, tenantId });
 }

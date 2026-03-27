@@ -5,11 +5,17 @@ import { appendAuditLog } from "@/lib/audit";
 import { db } from "@/db";
 import { groups } from "@/db/schema";
 import { inArray } from "drizzle-orm";
+import { getTenantId } from "@/lib/tenant-context";
 
 export async function POST(request: NextRequest) {
   const sessionOrError = await requireAdmin();
   if (sessionOrError instanceof NextResponse) return sessionOrError;
   const session = sessionOrError;
+
+  const tenantId = await getTenantId(request, session.user.id);
+  if (!tenantId) {
+    return NextResponse.json({ error: "Tenant not found" }, { status: 400 });
+  }
 
   const { email, role, groupIds } = await request.json();
 
@@ -17,7 +23,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Role must be 'admin' or 'member'" }, { status: 400 });
   }
 
-  const invite = await createInvite({ email, role, createdBy: session.user.id, groupIds });
+  const invite = await createInvite({
+    email,
+    role,
+    createdBy: session.user.id,
+    groupIds,
+    tenantId,
+  });
 
   let auditGroups: Array<{ id: string; name: string }> = [];
   if (groupIds?.length > 0) {
@@ -38,6 +50,7 @@ export async function POST(request: NextRequest) {
       role,
       ...(auditGroups.length > 0 ? { groups: auditGroups } : {}),
     },
+    tenantId,
   }).catch(() => {});
 
   return NextResponse.json(invite, { status: 201 });

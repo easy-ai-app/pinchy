@@ -73,7 +73,7 @@ vi.mock("dockerode", () => {
     this.createContainer = mockCreateContainer;
     this.createVolume = mockCreateVolume;
     this.getContainer = mockGetContainer;
-    this.getVolume = mockGetVolume;
+    this.getVolume = _mockGetVolume;
     this.listContainers = mockListContainers;
   }
   return {
@@ -86,7 +86,7 @@ vi.mock("@/db", () => ({
     select: () => ({
       from: (table: unknown) => ({
         where: (condition: unknown) => {
-          mockDbSelect(table, condition);
+          _mockDbSelect(table, condition);
           return Promise.resolve([]);
         },
       }),
@@ -94,7 +94,7 @@ vi.mock("@/db", () => ({
     update: (table: unknown) => ({
       set: (data: unknown) => ({
         where: (condition: unknown) => {
-          mockDbUpdate(table, data, condition);
+          _mockDbUpdate(table, data, condition);
           return Promise.resolve();
         },
       }),

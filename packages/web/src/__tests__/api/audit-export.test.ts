@@ -7,6 +7,10 @@ vi.mock("@/lib/api-auth", () => ({
   requireAdmin: vi.fn(),
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 const mockOrderBy = vi.fn();
 const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
 const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
@@ -26,6 +30,7 @@ vi.mock("@/db/schema", () => ({
     resource: "resource",
     detail: "detail",
     rowHmac: "row_hmac",
+    tenantId: "tenant_id",
   },
 }));
 

@@ -63,6 +63,10 @@ vi.mock("@/db/schema", async (importOriginal) => {
   };
 });
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 import { auth } from "@/lib/auth";
 import { deleteAgent, updateAgent } from "@/lib/agents";
 import { regenerateOpenClawConfig } from "@/lib/openclaw-config";
@@ -83,6 +87,9 @@ describe("GET /api/agents/[agentId]", () => {
 
   beforeEach(async () => {
     vi.resetAllMocks();
+    // Re-apply getTenantId mock after resetAllMocks clears implementations
+    const { getTenantId } = await import("@/lib/tenant-context");
+    vi.mocked(getTenantId).mockResolvedValue("default");
     const mod = await import("@/app/api/agents/[agentId]/route");
     GET = mod.GET;
   });
@@ -153,6 +160,8 @@ describe("PATCH /api/agents/[agentId]", () => {
 
   beforeEach(async () => {
     vi.resetAllMocks();
+    const { getTenantId } = await import("@/lib/tenant-context");
+    vi.mocked(getTenantId).mockResolvedValue("default");
     const mod = await import("@/app/api/agents/[agentId]/route");
     PATCH = mod.PATCH;
   });
@@ -488,6 +497,8 @@ describe("DELETE /api/agents/[agentId]", () => {
 
   beforeEach(async () => {
     vi.resetAllMocks();
+    const { getTenantId } = await import("@/lib/tenant-context");
+    vi.mocked(getTenantId).mockResolvedValue("default");
     const mod = await import("@/app/api/agents/[agentId]/route");
     DELETE = mod.DELETE;
   });

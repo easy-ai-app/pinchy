@@ -3,8 +3,9 @@ import { requireAdmin } from "@/lib/api-auth";
 import { isEnterprise } from "@/lib/enterprise";
 import { db } from "@/db";
 import { groups } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { appendAuditLog, type UpdateDetail } from "@/lib/audit";
+import { getTenantId } from "@/lib/tenant-context";
 
 export async function PATCH(
   request: NextRequest,
@@ -16,6 +17,11 @@ export async function PATCH(
 
   if (!(await isEnterprise())) {
     return NextResponse.json({ error: "Enterprise feature" }, { status: 403 });
+  }
+
+  const tenantId = await getTenantId(request, session.user.id!);
+  if (!tenantId) {
+    return NextResponse.json({ error: "No tenant context" }, { status: 400 });
   }
 
   const { groupId } = await params;
@@ -34,12 +40,19 @@ export async function PATCH(
   if (description !== undefined) data.description = description?.trim() || null;
 
   // Fetch existing group for 404 check and diff
-  const [existing] = await db.select().from(groups).where(eq(groups.id, groupId));
+  const [existing] = await db
+    .select()
+    .from(groups)
+    .where(and(eq(groups.id, groupId), eq(groups.tenantId, tenantId)));
   if (!existing) {
     return NextResponse.json({ error: "Group not found" }, { status: 404 });
   }
 
-  const [updated] = await db.update(groups).set(data).where(eq(groups.id, groupId)).returning();
+  const [updated] = await db
+    .update(groups)
+    .set(data)
+    .where(and(eq(groups.id, groupId), eq(groups.tenantId, tenantId)))
+    .returning();
 
   // Build diff of actual changes
   const changes: Record<string, { from: unknown; to: unknown }> = {};
@@ -58,6 +71,7 @@ export async function PATCH(
       eventType: "group.updated",
       resource: `group:${groupId}`,
       detail,
+      tenantId,
     }).catch(() => {});
   }
 
@@ -76,9 +90,17 @@ export async function DELETE(
     return NextResponse.json({ error: "Enterprise feature" }, { status: 403 });
   }
 
+  const tenantId = await getTenantId(request, session.user.id!);
+  if (!tenantId) {
+    return NextResponse.json({ error: "No tenant context" }, { status: 400 });
+  }
+
   const { groupId } = await params;
 
-  const [deleted] = await db.delete(groups).where(eq(groups.id, groupId)).returning();
+  const [deleted] = await db
+    .delete(groups)
+    .where(and(eq(groups.id, groupId), eq(groups.tenantId, tenantId)))
+    .returning();
 
   if (!deleted) {
     return NextResponse.json({ error: "Group not found" }, { status: 404 });
@@ -90,6 +112,7 @@ export async function DELETE(
     eventType: "group.deleted",
     resource: `group:${groupId}`,
     detail: { name: deleted.name },
+    tenantId,
   }).catch(() => {});
 
   return NextResponse.json({ success: true });

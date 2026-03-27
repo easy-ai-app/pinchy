@@ -3,12 +3,56 @@ import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 import { db } from "@/db";
 import { tenants, tenantMembers } from "@/db/schema";
-import { eq, count } from "drizzle-orm";
+import { eq, and, count, isNull, sql } from "drizzle-orm";
 import { requireTenantMember } from "@/lib/tenant-context";
 import { appendAuditLog } from "@/lib/audit";
 import { tenantContainerManager } from "@/lib/tenant-container-manager";
 
 const TENANT_NAME_MAX_LENGTH = 100;
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ tenantId: string }> }
+) {
+  const session = await getSession({ headers: await headers() });
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { tenantId } = await params;
+  const userId = session.user.id!;
+
+  // Require tenant membership — also gives us the caller's role
+  const memberResult = await requireTenantMember(tenantId, userId);
+  if (memberResult instanceof NextResponse) return memberResult;
+
+  // Fetch tenant details + member count
+  const [tenant] = await db
+    .select({
+      id: tenants.id,
+      name: tenants.name,
+      slug: tenants.slug,
+      status: tenants.status,
+      errorMessage: tenants.errorMessage,
+      createdAt: tenants.createdAt,
+      ownerId: tenants.ownerId,
+      memberCount: sql<number>`(
+        SELECT COUNT(*)::int FROM tenant_members tm
+        WHERE tm.tenant_id = ${tenants.id}
+      )`,
+    })
+    .from(tenants)
+    .where(and(eq(tenants.id, tenantId), isNull(tenants.deletedAt)));
+
+  if (!tenant) {
+    return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
+  }
+
+  return NextResponse.json({
+    ...tenant,
+    role: memberResult.role,
+  });
+}
 
 export async function PATCH(
   request: NextRequest,
@@ -45,7 +89,10 @@ export async function PATCH(
   }
 
   // Get existing tenant for audit diff
-  const [existing] = await db.select().from(tenants).where(eq(tenants.id, tenantId));
+  const [existing] = await db
+    .select()
+    .from(tenants)
+    .where(and(eq(tenants.id, tenantId), isNull(tenants.deletedAt)));
 
   if (!existing) {
     return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
@@ -119,7 +166,10 @@ export async function DELETE(
   }
 
   // Get tenant for audit log
-  const [tenant] = await db.select().from(tenants).where(eq(tenants.id, tenantId));
+  const [tenant] = await db
+    .select()
+    .from(tenants)
+    .where(and(eq(tenants.id, tenantId), isNull(tenants.deletedAt)));
 
   if (!tenant) {
     return NextResponse.json({ error: "Tenant not found" }, { status: 404 });

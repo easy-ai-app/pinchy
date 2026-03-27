@@ -1,3 +1,4 @@
+// audit-exempt: enterprise key is instance-level, not tenant-scoped
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api-auth";
 import { setSetting, deleteSetting } from "@/lib/settings";

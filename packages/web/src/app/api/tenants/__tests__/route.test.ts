@@ -22,45 +22,52 @@ const insertedTenants: Array<Record<string, unknown>> = [];
 const insertedMembers: Array<Record<string, unknown>> = [];
 let existingSlugs: string[] = [];
 
-vi.mock("@/db", () => ({
-  db: {
-    select: vi.fn().mockReturnValue({
-      from: vi.fn().mockImplementation(() => ({
-        innerJoin: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([]),
-        }),
-        where: vi.fn().mockImplementation(() => {
-          // For slug dedup check
-          return Promise.resolve(existingSlugs.map((s) => ({ slug: s })));
-        }),
-      })),
+vi.mock("@/db", () => {
+  const mockInsert = vi.fn().mockImplementation((table: unknown) => ({
+    values: vi.fn().mockImplementation((data: Record<string, unknown>) => {
+      const tableName = (table as { _: { name: string } })?._?.name;
+      if (tableName === "tenants") {
+        insertedTenants.push(data);
+        return {
+          returning: vi.fn().mockResolvedValue([
+            {
+              id: "new-tenant-id",
+              name: data.name,
+              slug: data.slug,
+              ownerId: data.ownerId,
+              status: "provisioning",
+              createdAt: new Date(),
+            },
+          ]),
+        };
+      }
+      if (tableName === "tenant_members") {
+        insertedMembers.push(data);
+      }
+      return { returning: vi.fn().mockResolvedValue([data]) };
     }),
-    insert: vi.fn().mockImplementation((table: unknown) => ({
-      values: vi.fn().mockImplementation((data: Record<string, unknown>) => {
-        const tableName = (table as { _: { name: string } })?._?.name;
-        if (tableName === "tenants") {
-          insertedTenants.push(data);
-          return {
-            returning: vi.fn().mockResolvedValue([
-              {
-                id: "new-tenant-id",
-                name: data.name,
-                slug: data.slug,
-                ownerId: data.ownerId,
-                status: "provisioning",
-                createdAt: new Date(),
-              },
-            ]),
-          };
-        }
-        if (tableName === "tenant_members") {
-          insertedMembers.push(data);
-        }
-        return { returning: vi.fn().mockResolvedValue([data]) };
+  }));
+
+  return {
+    db: {
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockImplementation(() => ({
+          innerJoin: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue([]),
+          }),
+          where: vi.fn().mockImplementation(() => {
+            return Promise.resolve(existingSlugs.map((s) => ({ slug: s })));
+          }),
+        })),
       }),
-    })),
-  },
-}));
+      insert: mockInsert,
+      transaction: vi.fn().mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+        const tx = { insert: mockInsert };
+        return fn(tx);
+      }),
+    },
+  };
+});
 
 vi.mock("@/db/schema", () => ({
   tenants: {

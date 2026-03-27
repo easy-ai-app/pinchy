@@ -1,13 +1,21 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api-auth";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db } from "@/db";
-import { users, userGroups, groups } from "@/db/schema";
+import { users, userGroups, groups, tenantMembers } from "@/db/schema";
+import { getTenantId } from "@/lib/tenant-context";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const sessionOrError = await requireAdmin();
   if (sessionOrError instanceof NextResponse) return sessionOrError;
+  const session = sessionOrError;
 
+  const tenantId = await getTenantId(request, session.user.id);
+  if (!tenantId) {
+    return NextResponse.json({ error: "Tenant not found" }, { status: 400 });
+  }
+
+  // Return only users who are members of the current tenant
   const allUsers = await db
     .select({
       id: users.id,
@@ -15,8 +23,13 @@ export async function GET() {
       email: users.email,
       role: users.role,
       banned: users.banned,
+      tenantRole: tenantMembers.role,
     })
-    .from(users);
+    .from(users)
+    .innerJoin(
+      tenantMembers,
+      and(eq(tenantMembers.userId, users.id), eq(tenantMembers.tenantId, tenantId))
+    );
 
   const allUserGroups = await db
     .select({

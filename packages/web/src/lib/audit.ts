@@ -1,5 +1,5 @@
 import { createHmac } from "crypto";
-import { asc, gte, lte, and } from "drizzle-orm";
+import { asc, eq, gte, lte, and } from "drizzle-orm";
 import { db } from "@/db";
 import { auditLog } from "@/db/schema";
 import { getOrCreateSecret } from "@/lib/encryption";
@@ -115,6 +115,7 @@ type AuditLogBase = {
   actorType: "user" | "agent" | "system";
   actorId: string;
   resource?: string | null;
+  tenantId?: string;
 };
 
 export type AuditLogEntry =
@@ -160,7 +161,7 @@ export async function appendAuditLog(entry: AuditLogEntry): Promise<void> {
     eventType: entry.eventType,
     resource: entry.resource ?? null,
     detail,
-    tenantId: "default", // TODO: resolve from request tenant context
+    tenantId: entry.tenantId ?? "default",
     rowHmac,
   });
 }
@@ -171,17 +172,21 @@ interface VerifyResult {
   invalidIds: number[];
 }
 
-export async function verifyIntegrity(fromId?: number, toId?: number): Promise<VerifyResult> {
+export async function verifyIntegrity(
+  fromId?: number,
+  toId?: number,
+  tenantId = "default"
+): Promise<VerifyResult> {
   const secret = getOrCreateSecret("audit_hmac_secret");
 
-  const conditions = [];
+  const conditions = [eq(auditLog.tenantId, tenantId)];
   if (fromId !== undefined) conditions.push(gte(auditLog.id, fromId));
   if (toId !== undefined) conditions.push(lte(auditLog.id, toId));
 
   const entries = await db
     .select()
     .from(auditLog)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .where(and(...conditions))
     .orderBy(asc(auditLog.id));
 
   const invalidIds: number[] = [];

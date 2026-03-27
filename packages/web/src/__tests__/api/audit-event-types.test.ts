@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
@@ -7,8 +7,13 @@ vi.mock("@/lib/api-auth", () => ({
   requireAdmin: vi.fn(),
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 const mockOrderBy = vi.fn();
-const mockFrom = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
+const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
+const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
 const mockSelectDistinct = vi.fn().mockReturnValue({ from: mockFrom });
 
 vi.mock("@/db", () => ({
@@ -16,11 +21,12 @@ vi.mock("@/db", () => ({
 }));
 
 vi.mock("@/db/schema", () => ({
-  auditLog: { eventType: "event_type" },
+  auditLog: { eventType: "event_type", tenantId: "tenant_id" },
 }));
 
 vi.mock("drizzle-orm", () => ({
   asc: vi.fn((col) => col),
+  eq: vi.fn((col, val) => ({ col, val })),
 }));
 
 import { requireAdmin } from "@/lib/api-auth";
@@ -40,7 +46,8 @@ describe("GET /api/audit/event-types", () => {
     );
 
     const { GET } = await import("@/app/api/audit/event-types/route");
-    const response = await GET();
+    const request = new NextRequest("http://localhost/api/audit/event-types");
+    const response = await GET(request);
     expect(response.status).toBe(403);
   });
 
@@ -52,7 +59,8 @@ describe("GET /api/audit/event-types", () => {
     ]);
 
     const { GET } = await import("@/app/api/audit/event-types/route");
-    const response = await GET();
+    const request = new NextRequest("http://localhost/api/audit/event-types");
+    const response = await GET(request);
 
     expect(response.status).toBe(200);
     const data = await response.json();
@@ -63,7 +71,8 @@ describe("GET /api/audit/event-types", () => {
     mockOrderBy.mockResolvedValue([]);
 
     const { GET } = await import("@/app/api/audit/event-types/route");
-    const response = await GET();
+    const request = new NextRequest("http://localhost/api/audit/event-types");
+    const response = await GET(request);
 
     expect(response.status).toBe(200);
     const data = await response.json();
@@ -74,7 +83,8 @@ describe("GET /api/audit/event-types", () => {
     mockOrderBy.mockResolvedValue([]);
 
     const { GET } = await import("@/app/api/audit/event-types/route");
-    await GET();
+    const request = new NextRequest("http://localhost/api/audit/event-types");
+    await GET(request);
 
     expect(mockSelectDistinct).toHaveBeenCalledWith({ eventType: "event_type" });
     expect(mockFrom).toHaveBeenCalledWith(expect.anything());

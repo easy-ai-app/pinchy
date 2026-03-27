@@ -4,6 +4,7 @@ import { createAuthMiddleware } from "better-auth/api";
 import { admin } from "better-auth/plugins";
 import { verifyPassword as verifyScrypt } from "better-auth/crypto";
 import bcrypt from "bcryptjs";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { appendAuditLog } from "@/lib/audit";
@@ -92,6 +93,42 @@ export const auth = betterAuth({
       context: {
         type: "string",
         required: false,
+      },
+    },
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user) => {
+          // Auto-join the "default" tenant for new users (safety net).
+          // The setup flow and invite claim route handle their own tenant
+          // membership, so this is a fallback for open registration or
+          // any future sign-up path that doesn't explicitly assign a tenant.
+          try {
+            const [defaultTenant] = await db
+              .select({ id: schema.tenants.id })
+              .from(schema.tenants)
+              .where(eq(schema.tenants.id, "default"));
+
+            if (!defaultTenant) return; // No default tenant yet (pre-setup)
+
+            // Check if already a member (setup flow may have already added)
+            const [existing] = await db
+              .select({ tenantId: schema.tenantMembers.tenantId })
+              .from(schema.tenantMembers)
+              .where(eq(schema.tenantMembers.userId, user.id));
+
+            if (!existing) {
+              await db.insert(schema.tenantMembers).values({
+                tenantId: "default",
+                userId: user.id,
+                role: "member",
+              });
+            }
+          } catch {
+            // Don't break user creation if tenant assignment fails
+          }
+        },
       },
     },
   },

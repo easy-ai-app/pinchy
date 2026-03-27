@@ -49,6 +49,10 @@ vi.mock("@/lib/provider-models", () => ({
   resetCache: vi.fn(),
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 vi.mock("@/db", () => ({
   db: {
     update: vi.fn().mockReturnValue({
@@ -70,7 +74,7 @@ vi.mock("@/db", () => ({
 
 import { validateProviderKey } from "@/lib/providers";
 import { getSetting, setSetting } from "@/lib/settings";
-import { writeOpenClawConfig, regenerateOpenClawConfig } from "@/lib/openclaw-config";
+import { regenerateOpenClawConfig } from "@/lib/openclaw-config";
 import { db } from "@/db";
 import { requireAdmin } from "@/lib/api-auth";
 import { resetCache } from "@/lib/provider-models";
@@ -126,8 +130,8 @@ describe("POST /api/setup/provider", () => {
       }) as any
     );
 
-    expect(setSetting).toHaveBeenCalledWith("anthropic_api_key", "sk-ant-key", true);
-    expect(setSetting).toHaveBeenCalledWith("default_provider", "anthropic", false);
+    expect(setSetting).toHaveBeenCalledWith("anthropic_api_key", "sk-ant-key", true, "default");
+    expect(setSetting).toHaveBeenCalledWith("default_provider", "anthropic", false, "default");
   });
 
   it("should update agent model when adding the first provider", async () => {

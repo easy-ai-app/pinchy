@@ -33,7 +33,8 @@ async function generateSlug(name: string): Promise<string> {
 
   // Deduplicate with -2, -3, etc.
   let suffix = 2;
-  while (true) {
+  const MAX_SLUG_ATTEMPTS = 100;
+  while (suffix <= MAX_SLUG_ATTEMPTS) {
     const candidate = `${base}-${suffix}`;
     const [dup] = await db
       .select({ slug: tenants.slug })
@@ -43,6 +44,8 @@ async function generateSlug(name: string): Promise<string> {
     if (!dup) return candidate;
     suffix++;
   }
+  // Fallback: append random suffix
+  return `${base}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
 export async function GET() {
@@ -85,6 +88,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  if (session.user.role !== "admin") {
+    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+  }
+
   const body = await request.json();
   const { name } = body;
 
@@ -103,15 +110,24 @@ export async function POST(request: NextRequest) {
   const userId = session.user.id!;
   const slug = await generateSlug(name.trim());
 
-  // Insert tenant (with slug collision retry)
+  // Insert tenant + member in a transaction (with slug collision retry)
   let tenant;
   try {
-    [tenant] = await db
-      .insert(tenants)
-      .values({ name: name.trim(), slug, ownerId: userId, status: "provisioning" })
-      .returning();
+    tenant = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(tenants)
+        .values({ name: name.trim(), slug, ownerId: userId, status: "provisioning" })
+        .returning();
+
+      await tx.insert(tenantMembers).values({
+        tenantId: created.id,
+        userId,
+        role: "owner",
+      });
+
+      return created;
+    });
   } catch (error: unknown) {
-    // Handle slug collision (concurrent request got same slug)
     if (
       error &&
       typeof error === "object" &&
@@ -119,21 +135,24 @@ export async function POST(request: NextRequest) {
       (error as { code: string }).code === "23505"
     ) {
       const retrySlug = `${slug}-${crypto.randomUUID().slice(0, 4)}`;
-      [tenant] = await db
-        .insert(tenants)
-        .values({ name: name.trim(), slug: retrySlug, ownerId: userId, status: "provisioning" })
-        .returning();
+      tenant = await db.transaction(async (tx) => {
+        const [created] = await tx
+          .insert(tenants)
+          .values({ name: name.trim(), slug: retrySlug, ownerId: userId, status: "provisioning" })
+          .returning();
+
+        await tx.insert(tenantMembers).values({
+          tenantId: created.id,
+          userId,
+          role: "owner",
+        });
+
+        return created;
+      });
     } else {
       throw error;
     }
   }
-
-  // Insert tenant member with owner role
-  await db.insert(tenantMembers).values({
-    tenantId: tenant.id,
-    userId,
-    role: "owner",
-  });
 
   // Audit log
   appendAuditLog({

@@ -7,6 +7,10 @@ vi.mock("@/lib/api-auth", () => ({
   requireAdmin: vi.fn(),
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 // Build chainable mock for entries query:
 // select().from().leftJoin().leftJoin().leftJoin().where().orderBy().limit().offset()
 const mockEntriesOffset = vi.fn();
@@ -38,6 +42,7 @@ vi.mock("@/db/schema", () => ({
     resource: "resource",
     detail: "detail",
     rowHmac: "row_hmac",
+    tenantId: "tenant_id",
   },
   users: {
     id: "id",
@@ -62,7 +67,7 @@ vi.mock("drizzle-orm", () => ({
 }));
 
 vi.mock("drizzle-orm/pg-core", () => ({
-  alias: vi.fn((table, _name) => table),
+  alias: vi.fn((table, _alias) => table),
 }));
 
 import { requireAdmin } from "@/lib/api-auth";

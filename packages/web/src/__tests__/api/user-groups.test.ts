@@ -28,6 +28,10 @@ vi.mock("@/lib/enterprise", () => ({
   isEnterprise: mockIsEnterprise,
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 const mockReturning = vi.fn();
 const mockValues = vi.fn().mockReturnValue({ returning: mockReturning });
 const mockInsert = vi.fn().mockReturnValue({ values: mockValues });
@@ -64,10 +68,10 @@ describe("PUT /api/users/[userId]/groups", () => {
     vi.clearAllMocks();
     mockDeleteWhere.mockResolvedValue(undefined);
     mockIsEnterprise.mockResolvedValue(true);
-    // Default: user exists (first select call), groups exist (second), previous memberships (third)
+    // Default: tenant membership (first), user exists (second), previous memberships (third), group names (fourth)
     mockSelectWhere
+      .mockResolvedValueOnce([{ userId: "user-1" }]) // tenant membership check
       .mockResolvedValueOnce([{ id: "user-1", name: "Max Müller" }]) // user lookup
-      .mockResolvedValueOnce([{ id: "g1", name: "Engineering" }]) // group names
       .mockResolvedValueOnce([]); // previous memberships
     const mod = await import("@/app/api/users/[userId]/groups/route");
     PUT = mod.PUT;
@@ -143,15 +147,15 @@ describe("PUT /api/users/[userId]/groups", () => {
     expect(body.error).toBe("groupIds must be an array");
   });
 
-  it("returns 404 when user not found", async () => {
+  it("returns 404 when user not found (no tenant membership)", async () => {
     vi.mocked(auth.api.getSession).mockResolvedValueOnce({
       user: { id: "admin-1", role: "admin" },
       expires: "",
     } as any);
 
-    // Override: user does not exist
+    // Override: tenant membership check returns empty (user not in tenant)
     mockSelectWhere.mockReset();
-    mockSelectWhere.mockResolvedValueOnce([]); // user lookup returns empty
+    mockSelectWhere.mockResolvedValueOnce([]); // tenant membership returns empty
 
     const request = new NextRequest("http://localhost:7777/api/users/nonexistent/groups", {
       method: "PUT",
@@ -175,6 +179,7 @@ describe("PUT /api/users/[userId]/groups", () => {
     // Reset and set up mocks for this specific test
     mockSelectWhere.mockReset();
     mockSelectWhere
+      .mockResolvedValueOnce([{ userId: "user-1" }]) // tenant membership check
       .mockResolvedValueOnce([{ id: "user-1", name: "Max Müller" }]) // user lookup
       .mockResolvedValueOnce([{ groupId: "g3" }]) // previous memberships
       .mockResolvedValueOnce([
@@ -214,6 +219,7 @@ describe("PUT /api/users/[userId]/groups", () => {
     // Reset and set up mocks
     mockSelectWhere.mockReset();
     mockSelectWhere
+      .mockResolvedValueOnce([{ userId: "user-1" }]) // tenant membership check
       .mockResolvedValueOnce([{ id: "user-1", name: "Max Müller" }]) // user lookup
       .mockResolvedValueOnce([{ groupId: "g2" }]) // previous memberships (g2 will be removed)
       .mockResolvedValueOnce([
@@ -258,9 +264,10 @@ describe("PUT /api/users/[userId]/groups", () => {
     // Reset and set up mocks
     mockSelectWhere.mockReset();
     mockSelectWhere
+      .mockResolvedValueOnce([{ userId: "user-1" }]) // tenant membership check
       .mockResolvedValueOnce([{ id: "user-1", name: "Max Müller" }]) // user lookup
-      .mockResolvedValueOnce([]) // no new group names (empty groupIds)
-      .mockResolvedValueOnce([{ groupId: "g1" }]); // previous memberships
+      .mockResolvedValueOnce([{ groupId: "g1" }]) // previous memberships
+      .mockResolvedValueOnce([{ id: "g1", name: "Engineering" }]); // group names for removed g1
 
     const request = new NextRequest("http://localhost:7777/api/users/user-1/groups", {
       method: "PUT",

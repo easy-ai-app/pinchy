@@ -27,13 +27,17 @@ vi.mock("@/lib/enterprise", () => ({
   isEnterprise: vi.fn().mockResolvedValue(true),
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 const mockReturning = vi.fn();
 const mockValues = vi.fn().mockReturnValue({ returning: mockReturning });
 const mockInsert = vi.fn().mockReturnValue({ values: mockValues });
 
 const mockSelectGroupBy = vi.fn();
-const mockSelectLeftJoin = vi.fn().mockReturnValue({ groupBy: mockSelectGroupBy });
 const mockSelectWhere = vi.fn();
+const mockSelectLeftJoin = vi.fn().mockReturnValue({ where: mockSelectWhere });
 const mockSelectFrom = vi
   .fn()
   .mockReturnValue({ leftJoin: mockSelectLeftJoin, where: mockSelectWhere });
@@ -82,14 +86,14 @@ describe("GET /api/groups", () => {
       expires: "",
     } as any);
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/groups"));
     expect(response.status).toBe(403);
   });
 
   it("returns 401 when not authenticated", async () => {
     vi.mocked(auth.api.getSession).mockResolvedValueOnce(null);
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/groups"));
     expect(response.status).toBe(401);
   });
 
@@ -110,8 +114,10 @@ describe("GET /api/groups", () => {
       },
     ];
     mockSelectGroupBy.mockResolvedValueOnce(fakeGroups);
+    // GET route: .from().leftJoin().where().groupBy() — where() must return { groupBy }
+    mockSelectWhere.mockReturnValueOnce({ groupBy: mockSelectGroupBy });
 
-    const response = await GET();
+    const response = await GET(new NextRequest("http://localhost/api/groups"));
     expect(response.status).toBe(200);
 
     const body = await response.json();

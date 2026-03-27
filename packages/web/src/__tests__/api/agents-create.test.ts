@@ -101,6 +101,10 @@ vi.mock("@/lib/avatar", () => ({
   generateAvatarSeed: vi.fn().mockReturnValue("mock-seed-uuid"),
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 import { POST } from "@/app/api/agents/route";
 import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";

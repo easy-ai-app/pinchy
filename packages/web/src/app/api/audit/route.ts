@@ -4,10 +4,14 @@ import { db } from "@/db";
 import { auditLog, users, agents } from "@/db/schema";
 import { desc, eq, and, gte, lte, count, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import { getTenantId } from "@/lib/tenant-context";
 
 export async function GET(request: NextRequest) {
   const sessionOrError = await requireAdmin();
   if (sessionOrError instanceof NextResponse) return sessionOrError;
+
+  const tenantId = await getTenantId(request, sessionOrError.user.id!);
+  if (!tenantId) return NextResponse.json({ error: "No tenant context" }, { status: 400 });
 
   const url = new URL(request.url);
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1"));
@@ -17,7 +21,7 @@ export async function GET(request: NextRequest) {
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
 
-  const conditions = [];
+  const conditions = [eq(auditLog.tenantId, tenantId)];
   if (eventType) conditions.push(eq(auditLog.eventType, eventType));
   if (actorId) conditions.push(eq(auditLog.actorId, actorId));
   if (from) conditions.push(gte(auditLog.timestamp, new Date(from)));
@@ -27,7 +31,7 @@ export async function GET(request: NextRequest) {
     conditions.push(lte(auditLog.timestamp, toDate));
   }
 
-  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const where = and(...conditions);
 
   const actorUser = alias(users, "actor_user");
   const resourceAgent = alias(agents, "resource_agent");

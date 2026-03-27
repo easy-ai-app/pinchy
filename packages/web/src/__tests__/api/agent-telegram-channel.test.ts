@@ -53,8 +53,13 @@ vi.mock("drizzle-orm", async (importOriginal) => {
   return {
     ...(actual as object),
     eq: vi.fn(),
+    and: vi.fn(),
   };
 });
+
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
 
 import { GET, POST, DELETE } from "@/app/api/agents/[agentId]/channels/telegram/route";
 import { getSetting, setSetting, deleteSetting } from "@/lib/settings";
@@ -81,6 +86,7 @@ describe("GET /api/agents/[agentId]/channels/telegram", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequireAdmin.mockResolvedValue(adminSession);
+    vi.mocked(db.query.agents.findFirst).mockResolvedValue(mockAgent as any);
   });
 
   it("returns configured: false when no token exists", async () => {
@@ -142,8 +148,18 @@ describe("POST /api/agents/[agentId]/channels/telegram", () => {
     expect(data).toEqual({ botUsername: "test_bot", botId: 123456 });
 
     expect(mockValidateTelegramBotToken).toHaveBeenCalledWith("123456:ABC-token");
-    expect(setSetting).toHaveBeenCalledWith("telegram_bot_token:agent-1", "123456:ABC-token", true);
-    expect(setSetting).toHaveBeenCalledWith("telegram_bot_username:agent-1", "test_bot", false);
+    expect(setSetting).toHaveBeenCalledWith(
+      "telegram_bot_token:agent-1",
+      "123456:ABC-token",
+      true,
+      "default"
+    );
+    expect(setSetting).toHaveBeenCalledWith(
+      "telegram_bot_username:agent-1",
+      "test_bot",
+      false,
+      "default"
+    );
     expect(mockRegenerateOpenClawConfig).toHaveBeenCalled();
     expect(appendAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -220,8 +236,8 @@ describe("DELETE /api/agents/[agentId]/channels/telegram", () => {
     expect(response.status).toBe(200);
     expect(data).toEqual({ success: true });
 
-    expect(deleteSetting).toHaveBeenCalledWith("telegram_bot_token:agent-1");
-    expect(deleteSetting).toHaveBeenCalledWith("telegram_bot_username:agent-1");
+    expect(deleteSetting).toHaveBeenCalledWith("telegram_bot_token:agent-1", "default");
+    expect(deleteSetting).toHaveBeenCalledWith("telegram_bot_username:agent-1", "default");
     expect(mockRegenerateOpenClawConfig).toHaveBeenCalled();
     expect(appendAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({

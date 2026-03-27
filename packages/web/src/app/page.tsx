@@ -29,7 +29,7 @@ export default async function Home() {
   if (!isMobile) {
     const userId = session?.user?.id;
     const userRole = session?.user?.role ?? "member";
-    const visibleAgents = await getVisibleAgents(userId!, userRole);
+    const visibleAgents = await getVisibleAgents(userId!, userRole, "default");
     if (visibleAgents.length > 0) {
       redirect(`/chat/${visibleAgents[0].id}`);
     }

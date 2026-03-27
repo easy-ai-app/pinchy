@@ -22,14 +22,24 @@ import { type ProviderName } from "@/lib/providers";
 import { getDefaultModel } from "@/lib/provider-models";
 import { appendAuditLog } from "@/lib/audit";
 import { getVisibleAgents } from "@/lib/visible-agents";
+import { getTenantId } from "@/lib/tenant-context";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await getSession({ headers: await headers() });
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const visibleAgents = await getVisibleAgents(session.user.id!, session.user.role ?? "member");
+  const tenantId = await getTenantId(request, session.user.id!);
+  if (!tenantId) {
+    return NextResponse.json({ error: "No tenant context" }, { status: 400 });
+  }
+
+  const visibleAgents = await getVisibleAgents(
+    session.user.id!,
+    session.user.role ?? "member",
+    tenantId
+  );
   return NextResponse.json(visibleAgents);
 }
 
@@ -41,6 +51,11 @@ export async function POST(request: NextRequest) {
 
   if (session.user.role !== "admin") {
     return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+  }
+
+  const tenantId = await getTenantId(request, session.user.id!);
+  if (!tenantId) {
+    return NextResponse.json({ error: "No tenant context" }, { status: 400 });
   }
 
   const body = await request.json();
@@ -87,7 +102,7 @@ export async function POST(request: NextRequest) {
   const preset = getPersonalityPreset(template.defaultPersonality);
 
   // Determine default model dynamically from provider's live model list
-  const defaultProvider = (await getSetting("default_provider")) as ProviderName | null;
+  const defaultProvider = (await getSetting("default_provider", tenantId)) as ProviderName | null;
   const model = defaultProvider
     ? await getDefaultModel(defaultProvider)
     : "anthropic/claude-haiku-4-5-20251001";
@@ -100,7 +115,7 @@ export async function POST(request: NextRequest) {
       templateId,
       pluginConfig: template.pluginId && pluginConfig ? pluginConfig : null,
       ownerId: session.user.id,
-      tenantId: "default", // TODO: resolve from request context when tenant switching is wired up
+      tenantId,
       allowedTools: template.allowedTools,
       tagline: tagline || template.defaultTagline || null,
       avatarSeed: generateAvatarSeed(),
@@ -115,6 +130,7 @@ export async function POST(request: NextRequest) {
     eventType: "agent.created",
     resource: `agent:${agent.id}`,
     detail: { name: agent.name, model: agent.model, templateId },
+    tenantId,
   }).catch(() => {});
 
   // Create workspace with personality preset's SOUL.md

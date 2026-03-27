@@ -11,6 +11,7 @@ import { restartState } from "./src/server/restart-state";
 import { WsRateLimiter } from "./src/server/ws-rate-limit";
 import { setOpenClawClient } from "./src/server/openclaw-client";
 import { logCapture } from "./src/lib/log-capture";
+import { resolveTenantId } from "./src/lib/tenant-context";
 
 logCapture.install();
 
@@ -85,8 +86,14 @@ app.prepare().then(async () => {
   const sessionCache = new SessionCache();
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: 1 * 1024 * 1024 });
-  const sessionMap = new Map<WebSocket, { userId: string; userRole: string }>();
+  const sessionMap = new Map<WebSocket, { userId: string; userRole: string; tenantId: string }>();
   const wsRateLimiter = new WsRateLimiter();
+
+  function parseCookieValue(cookieHeader: string | undefined, name: string): string | undefined {
+    if (!cookieHeader) return undefined;
+    const match = new RegExp(`(?:^|;\\s*)${name}=([^;]*)`).exec(cookieHeader);
+    return match?.[1];
+  }
 
   function broadcastToClients(message: Record<string, unknown>) {
     const payload = JSON.stringify(message);
@@ -124,9 +131,13 @@ app.prepare().then(async () => {
         return;
       }
 
+      // Resolve tenant from pinchy-tenant cookie
+      const cookieTenantHint = parseCookieValue(request.headers.cookie, "pinchy-tenant");
+      const tenantId = (await resolveTenantId(cookieTenantHint, userId)) ?? "default";
+
       wss.handleUpgrade(request, socket, head, (ws) => {
         wsRateLimiter.trackConnection(userId);
-        sessionMap.set(ws, { userId, userRole });
+        sessionMap.set(ws, { userId, userRole, tenantId });
         wss.emit("connection", ws, request);
       });
     }
@@ -138,7 +149,13 @@ app.prepare().then(async () => {
     if (!sessionInfo) return;
 
     const router = openclawClient
-      ? new ClientRouter(openclawClient, sessionInfo.userId, sessionInfo.userRole, sessionCache)
+      ? new ClientRouter(
+          openclawClient,
+          sessionInfo.userId,
+          sessionInfo.userRole,
+          sessionCache,
+          sessionInfo.tenantId
+        )
       : null;
 
     clientWs.on("message", (data) => {

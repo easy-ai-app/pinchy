@@ -18,12 +18,14 @@ export async function createInvite({
   type = "invite",
   createdBy,
   groupIds,
+  tenantId = "default",
 }: {
   email?: string;
   role: string;
   type?: "invite" | "reset";
   createdBy: string;
   groupIds?: string[];
+  tenantId?: string;
 }) {
   const { token, tokenHash } = generateInviteToken();
   const expiresAt = new Date(Date.now() + EXPIRY_DAYS * 24 * 60 * 60 * 1000);
@@ -38,7 +40,7 @@ export async function createInvite({
         type,
         createdBy,
         expiresAt,
-        tenantId: "default" /* TODO: resolve from request tenant context */,
+        tenantId,
       })
       .returning();
 

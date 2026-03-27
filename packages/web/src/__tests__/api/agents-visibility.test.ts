@@ -102,6 +102,10 @@ vi.mock("@/lib/enterprise", () => ({
   isEnterprise: vi.fn().mockResolvedValue(true),
 }));
 
+vi.mock("@/lib/tenant-context", () => ({
+  getTenantId: vi.fn().mockResolvedValue("default"),
+}));
+
 import { auth } from "@/lib/auth";
 import { updateAgent } from "@/lib/agents";
 import { db } from "@/db";

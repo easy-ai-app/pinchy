@@ -12,6 +12,7 @@ import { writeIdentityFile } from "@/lib/workspace";
 import { db } from "@/db";
 import { agentGroups, groups } from "@/db/schema";
 import { getAgentGroupIds } from "@/lib/groups";
+import { getTenantId } from "@/lib/tenant-context";
 
 export async function GET(
   request: NextRequest,
@@ -22,9 +23,19 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const tenantId = await getTenantId(request, session.user.id!);
+  if (!tenantId) {
+    return NextResponse.json({ error: "No tenant context" }, { status: 400 });
+  }
+
   const { agentId } = await params;
 
-  const agentOrError = await getAgentWithAccess(agentId, session.user.id!, session.user.role);
+  const agentOrError = await getAgentWithAccess(
+    agentId,
+    session.user.id!,
+    session.user.role,
+    tenantId
+  );
   if (agentOrError instanceof NextResponse) return agentOrError;
   const agent = agentOrError;
 
@@ -41,12 +52,18 @@ export async function PATCH(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const tenantId = await getTenantId(request, session.user.id!);
+  if (!tenantId) {
+    return NextResponse.json({ error: "No tenant context" }, { status: 400 });
+  }
+
   const { agentId } = await params;
 
   const existingAgentOrError = await getAgentWithAccess(
     agentId,
     session.user.id!,
-    session.user.role
+    session.user.role,
+    tenantId
   );
   if (existingAgentOrError instanceof NextResponse) return existingAgentOrError;
   const existingAgent = existingAgentOrError;
@@ -214,6 +231,7 @@ export async function PATCH(
       eventType: "agent.updated",
       resource: `agent:${agentId}`,
       detail: auditDetail,
+      tenantId,
     }).catch(() => {});
   }
 
@@ -232,9 +250,19 @@ export async function DELETE(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const tenantId = await getTenantId(request, session.user.id!);
+  if (!tenantId) {
+    return NextResponse.json({ error: "No tenant context" }, { status: 400 });
+  }
+
   const { agentId } = await params;
 
-  const agentOrError = await getAgentWithAccess(agentId, session.user.id!, session.user.role);
+  const agentOrError = await getAgentWithAccess(
+    agentId,
+    session.user.id!,
+    session.user.role,
+    tenantId
+  );
   if (agentOrError instanceof NextResponse) return agentOrError;
   const agent = agentOrError;
 
@@ -250,6 +278,7 @@ export async function DELETE(
     eventType: "agent.deleted",
     resource: `agent:${agentId}`,
     detail: { name: agent.name },
+    tenantId,
   }).catch(() => {});
 
   revalidatePath("/", "layout");

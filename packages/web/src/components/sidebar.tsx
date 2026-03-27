@@ -3,9 +3,10 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { BarChart3, Bug, ClipboardList, Plus, Settings, Zap } from "lucide-react";
+import { BarChart3, Bug, Building2, ClipboardList, Plus, Settings, Zap } from "lucide-react";
 import { LogoutButton } from "@/components/logout-button";
 import { useAgentsContext } from "@/components/agents-provider";
+import { TenantSwitcher } from "@/components/tenant-switcher";
 import {
   Sidebar,
   SidebarContent,
@@ -32,6 +33,7 @@ export function AppSidebar({ isAdmin }: AppSidebarProps) {
   return (
     <Sidebar>
       <SidebarHeader>
+        <TenantSwitcher />
         <div className="px-2 py-3 flex items-center gap-3">
           <Image src="/pinchy-logo.png" alt="Pinchy" width={32} height={34} />
           <span className="font-bold text-lg">Pinchy</span>
@@ -133,6 +135,16 @@ export function AppSidebar({ isAdmin }: AppSidebarProps) {
                 <Link href="/audit">
                   <ClipboardList className="size-4" />
                   <span>Audit Trail</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
+          {isAdmin && (
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild>
+                <Link href="/tenants">
+                  <Building2 className="size-4" />
+                  <span>Tenants</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

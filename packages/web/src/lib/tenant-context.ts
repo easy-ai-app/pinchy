@@ -19,7 +19,8 @@ export async function getTenantId(request: NextRequest, userId?: string): Promis
       const valid = await validateTenantMembership(headerTenantId, userId);
       if (valid) return headerTenantId;
     } else {
-      return headerTenantId; // No userId to validate against — caller must check
+      const exists = await validateTenantExists(headerTenantId);
+      if (exists) return headerTenantId;
     }
   }
 
@@ -30,7 +31,8 @@ export async function getTenantId(request: NextRequest, userId?: string): Promis
       const valid = await validateTenantMembership(cookieTenantId, userId);
       if (valid) return cookieTenantId;
     } else {
-      return cookieTenantId;
+      const exists = await validateTenantExists(cookieTenantId);
+      if (exists) return cookieTenantId;
     }
   }
 
@@ -48,6 +50,14 @@ export async function getTenantId(request: NextRequest, userId?: string): Promis
   return membership?.tenantId ?? null;
 }
 
+async function validateTenantExists(tenantId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(and(eq(tenants.id, tenantId), isNull(tenants.deletedAt)));
+  return !!row;
+}
+
 // Internal: check user is member AND tenant is not deleted
 async function validateTenantMembership(tenantId: string, userId: string): Promise<boolean> {
   const [row] = await db
@@ -62,6 +72,33 @@ async function validateTenantMembership(tenantId: string, userId: string): Promi
       )
     );
   return !!row;
+}
+
+/**
+ * Resolve tenantId from a raw cookie/header value + userId, without needing NextRequest.
+ * Useful for WebSocket upgrade handlers where NextRequest is not available.
+ * Resolution: validate hint against membership, else fall back to first membership.
+ */
+export async function resolveTenantId(
+  tenantIdHint: string | undefined,
+  userId: string
+): Promise<string | null> {
+  // 1. Validate hint against membership
+  if (tenantIdHint) {
+    const valid = await validateTenantMembership(tenantIdHint, userId);
+    if (valid) return tenantIdHint;
+  }
+
+  // 2. Fall back to first membership
+  const [membership] = await db
+    .select({ tenantId: tenantMembers.tenantId })
+    .from(tenantMembers)
+    .innerJoin(tenants, eq(tenants.id, tenantMembers.tenantId))
+    .where(and(eq(tenantMembers.userId, userId), isNull(tenants.deletedAt)))
+    .orderBy(tenantMembers.joinedAt)
+    .limit(1);
+
+  return membership?.tenantId ?? null;
 }
 
 /**

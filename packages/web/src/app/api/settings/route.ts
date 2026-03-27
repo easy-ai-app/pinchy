@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api-auth";
 import { getAllSettings, setSetting } from "@/lib/settings";
 import { appendAuditLog } from "@/lib/audit";
+import { getTenantId } from "@/lib/tenant-context";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const sessionOrError = await requireAdmin();
   if (sessionOrError instanceof NextResponse) return sessionOrError;
 
-  const all = await getAllSettings();
+  const tenantId = await getTenantId(request, sessionOrError.user.id!);
+  if (!tenantId) return NextResponse.json({ error: "No tenant context" }, { status: 400 });
+
+  const all = await getAllSettings(tenantId);
   const safe = all.map((s) => ({
     ...s,
     value: s.encrypted ? "••••••••" : s.value,
@@ -19,14 +23,18 @@ export async function POST(request: NextRequest) {
   const sessionOrError = await requireAdmin();
   if (sessionOrError instanceof NextResponse) return sessionOrError;
 
+  const tenantId = await getTenantId(request, sessionOrError.user.id!);
+  if (!tenantId) return NextResponse.json({ error: "No tenant context" }, { status: 400 });
+
   const { key, value } = await request.json();
-  await setSetting(key, value, key.includes("api_key"));
+  await setSetting(key, value, key.includes("api_key"), tenantId);
 
   appendAuditLog({
     actorType: "user",
     actorId: sessionOrError.user.id!,
     eventType: "config.changed",
     detail: { key },
+    tenantId,
   }).catch(() => {});
 
   return NextResponse.json({ success: true });

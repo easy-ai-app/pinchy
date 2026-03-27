@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { getSession } from "@/lib/auth";
 import { readWorkspaceFile, writeWorkspaceFile } from "@/lib/workspace";
 import { getAgentWithAccess, assertAgentWriteAccess } from "@/lib/agent-access";
+import { getTenantId } from "@/lib/tenant-context";
 
 type Params = { params: Promise<{ agentId: string; filename: string }> };
 
@@ -13,9 +14,19 @@ export async function GET(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const tenantId = await getTenantId(request, session.user.id!);
+  if (!tenantId) {
+    return NextResponse.json({ error: "No tenant context" }, { status: 400 });
+  }
+
   const { agentId, filename } = await params;
 
-  const agentOrError = await getAgentWithAccess(agentId, session.user.id!, session.user.role);
+  const agentOrError = await getAgentWithAccess(
+    agentId,
+    session.user.id!,
+    session.user.role,
+    tenantId
+  );
   if (agentOrError instanceof NextResponse) return agentOrError;
 
   try {
@@ -33,9 +44,19 @@ export async function PUT(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const tenantId = await getTenantId(request, session.user.id!);
+  if (!tenantId) {
+    return NextResponse.json({ error: "No tenant context" }, { status: 400 });
+  }
+
   const { agentId, filename } = await params;
 
-  const agentOrError = await getAgentWithAccess(agentId, session.user.id!, session.user.role);
+  const agentOrError = await getAgentWithAccess(
+    agentId,
+    session.user.id!,
+    session.user.role,
+    tenantId
+  );
   if (agentOrError instanceof NextResponse) return agentOrError;
 
   // Only admins or personal agent owners can modify agent files

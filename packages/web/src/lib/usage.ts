@@ -9,6 +9,7 @@ interface RecordUsageParams {
   agentId: string;
   agentName: string;
   sessionKey: string;
+  tenantId?: string;
 }
 
 // Module-level cache for OpenClaw config pricing
@@ -78,7 +79,7 @@ export async function recordUsage(params: RecordUsageParams): Promise<void> {
 
 async function recordUsageImpl(params: RecordUsageParams, normalizedKey: string): Promise<void> {
   try {
-    const { openclawClient, userId, agentId, agentName } = params;
+    const { openclawClient, userId, agentId, agentName, tenantId = "default" } = params;
 
     // Get current cumulative token counts from OpenClaw
     const listResult = (await openclawClient.sessions.list()) as {
@@ -152,7 +153,7 @@ async function recordUsageImpl(params: RecordUsageParams, normalizedKey: string)
       agentName,
       sessionKey: normalizedKey,
       model,
-      tenantId: "default", // TODO: resolve from request tenant context
+      tenantId,
       inputTokens: deltaInput,
       outputTokens: deltaOutput,
       cacheReadTokens: deltaCacheRead,

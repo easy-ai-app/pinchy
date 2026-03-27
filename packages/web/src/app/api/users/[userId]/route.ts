@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api-auth";
 import { db } from "@/db";
-import { users, agents } from "@/db/schema";
+import { users, agents, tenantMembers } from "@/db/schema";
 import { eq, and, count } from "drizzle-orm";
 import { regenerateOpenClawConfig } from "@/lib/openclaw-config";
 import { deleteWorkspace } from "@/lib/workspace";
 import { appendAuditLog } from "@/lib/audit";
+import { getTenantId } from "@/lib/tenant-context";
 
 export async function PATCH(
   request: NextRequest,
@@ -14,6 +15,11 @@ export async function PATCH(
   const sessionOrError = await requireAdmin();
   if (sessionOrError instanceof NextResponse) return sessionOrError;
   const session = sessionOrError;
+
+  const tenantId = await getTenantId(request, session.user.id);
+  if (!tenantId) {
+    return NextResponse.json({ error: "Tenant not found" }, { status: 400 });
+  }
 
   const { userId } = await params;
   const { role } = await request.json();
@@ -26,6 +32,16 @@ export async function PATCH(
   // Cannot change own role
   if (userId === session.user.id) {
     return NextResponse.json({ error: "Cannot change your own role" }, { status: 400 });
+  }
+
+  // Verify target user is a member of this tenant
+  const [membership] = await db
+    .select({ userId: tenantMembers.userId })
+    .from(tenantMembers)
+    .where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, userId)));
+
+  if (!membership) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
   // Fetch user to verify existence and get current role
@@ -51,7 +67,7 @@ export async function PATCH(
   }
 
   // Update role
-  const [updated] = await db.update(users).set({ role }).where(eq(users.id, userId)).returning();
+  const [_updated] = await db.update(users).set({ role }).where(eq(users.id, userId)).returning();
 
   appendAuditLog({
     actorType: "user",
@@ -59,6 +75,7 @@ export async function PATCH(
     eventType: "user.role_updated",
     resource: `user:${userId}`,
     detail: { changes: { role: { from: user.role, to: role } }, userName: user.name },
+    tenantId,
   }).catch(() => {});
 
   return NextResponse.json({ success: true });
@@ -72,10 +89,25 @@ export async function DELETE(
   if (sessionOrError instanceof NextResponse) return sessionOrError;
   const session = sessionOrError;
 
+  const tenantId = await getTenantId(request, session.user.id);
+  if (!tenantId) {
+    return NextResponse.json({ error: "Tenant not found" }, { status: 400 });
+  }
+
   const { userId } = await params;
 
   if (userId === session.user.id) {
     return NextResponse.json({ error: "Cannot deactivate your own account" }, { status: 400 });
+  }
+
+  // Verify target user is a member of this tenant
+  const [membership] = await db
+    .select({ userId: tenantMembers.userId })
+    .from(tenantMembers)
+    .where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, userId)));
+
+  if (!membership) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
   // Find user's personal agents to soft-delete and clean up workspaces
@@ -100,6 +132,7 @@ export async function DELETE(
     eventType: "user.deleted",
     resource: `user:${userId}`,
     detail: { name: deactivated.name, email: deactivated.email },
+    tenantId,
   }).catch(() => {});
 
   // Soft-delete personal agents + cleanup workspaces
