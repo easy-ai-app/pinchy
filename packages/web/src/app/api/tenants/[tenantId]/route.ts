@@ -155,11 +155,12 @@ export async function DELETE(
     );
   }
 
-  // Check that this is not the user's only tenant
+  // Check that this is not the user's only active tenant
   const [memberCount] = await db
     .select({ count: count() })
     .from(tenantMembers)
-    .where(eq(tenantMembers.userId, userId));
+    .innerJoin(tenants, eq(tenants.id, tenantMembers.tenantId))
+    .where(and(eq(tenantMembers.userId, userId), isNull(tenants.deletedAt)));
 
   if (memberCount.count <= 1) {
     return NextResponse.json({ error: "Cannot delete your only tenant" }, { status: 400 });

@@ -157,11 +157,16 @@ describe("DELETE /api/tenants/[tenantId]", () => {
       status: "running",
     };
 
-    // Override DB select for memberCount check
+    // Override DB select for memberCount check (chain: .from().innerJoin().where())
     vi.mocked(db.select).mockReturnValue({
       from: vi.fn().mockReturnValue({
+        innerJoin: vi.fn().mockReturnValue({
+          where: vi.fn().mockImplementation(() => {
+            return Promise.resolve([{ count: mockTenantMemberCount }]);
+          }),
+        }),
         where: vi.fn().mockImplementation(() => {
-          return Promise.resolve([{ count: mockTenantMemberCount }, mockExistingTenant]);
+          return Promise.resolve([mockExistingTenant]);
         }),
       }),
     } as ReturnType<typeof db.select>);
@@ -197,10 +202,13 @@ describe("DELETE /api/tenants/[tenantId]", () => {
   it("should prevent deleting last tenant", async () => {
     mockTenantMemberCount = 1;
 
-    // Override DB select for this specific case
+    // Override DB select for this specific case (chain: .from().innerJoin().where())
     vi.mocked(db.select).mockReturnValue({
       from: vi.fn().mockReturnValue({
-        where: vi.fn().mockResolvedValue([{ count: 1 }]),
+        innerJoin: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([{ count: 1 }]),
+        }),
+        where: vi.fn().mockResolvedValue([]),
       }),
     } as ReturnType<typeof db.select>);
 

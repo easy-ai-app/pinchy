@@ -20,6 +20,9 @@ vi.mock("next/headers", () => ({
   headers: vi.fn().mockResolvedValue({
     get: (...args: unknown[]) => mockHeadersGet(...args),
   }),
+  cookies: vi.fn().mockResolvedValue({
+    get: vi.fn().mockReturnValue({ value: "default" }),
+  }),
 }));
 
 const mockDbSelect = vi.fn();
@@ -32,6 +35,14 @@ vi.mock("@/db", () => ({
 vi.mock("@/db/schema", () => ({
   agents: "agents-table",
   activeAgents: "active-agents-view",
+  tenantMembers: { tenantId: "tenantId", userId: "userId" },
+  tenants: { id: "id", deletedAt: "deletedAt" },
+}));
+
+vi.mock("drizzle-orm", () => ({
+  eq: vi.fn((_col: unknown, val: unknown) => ({ op: "eq", val })),
+  and: vi.fn((...args: unknown[]) => ({ op: "and", args })),
+  isNull: vi.fn((col: unknown) => ({ op: "isNull", col })),
 }));
 
 const mockGetVisibleAgents = vi.fn();
