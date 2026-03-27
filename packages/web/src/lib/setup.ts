@@ -38,9 +38,7 @@ export async function createAdmin(name: string, email: string, password: string)
     // Set admin role directly in DB
     await db.update(users).set({ role: "admin" }).where(eq(users.id, result.user.id));
 
-    await seedDefaultAgent(result.user.id);
-
-    // Create default tenant for the new admin
+    // Create default tenant BEFORE seeding agents (agents have FK to tenants)
     const existingTenant = await db.query.tenants.findFirst({
       where: eq(tenants.id, "default"),
     });
@@ -58,6 +56,8 @@ export async function createAdmin(name: string, email: string, password: string)
         role: "owner",
       });
     }
+
+    await seedDefaultAgent(result.user.id);
   } catch (error) {
     // Clean up the orphaned user if post-signup steps fail
     try {
