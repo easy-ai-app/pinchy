@@ -1,4 +1,4 @@
-x-openclaw-build:
+x-openclaw-build: &openclaw-build
   build:
     context: .
     dockerfile: Dockerfile.openclaw
@@ -18,13 +18,26 @@ services:
       - PINCHY_ENTERPRISE_KEY=${PINCHY_ENTERPRISE_KEY:-}
       - OPENCLAW_IMAGE=${OPENCLAW_IMAGE:-pinchy-openclaw}
       - DOCKER_NETWORK=${DOCKER_NETWORK:-pinchy_default}
+      - OPENCLAW_WS_URL=ws://openclaw:18789
+      - OPENCLAW_CONFIG_PATH=/openclaw-config/openclaw.json
+      - GATEWAY_TOKEN_PATH=/openclaw-config/gateway-token
     volumes:
       - pinchy-secrets:/app/secrets
+      - openclaw-config:/openclaw-config
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
+      openclaw:
+        condition: service_started
+
+  openclaw:
+    <<: *openclaw-build
+    volumes:
+      - openclaw-config:/root/.openclaw
+      - openclaw-workspaces:/root/.openclaw/workspaces
+    restart: unless-stopped
 
   db:
     image: postgres:17
@@ -44,3 +57,5 @@ services:
 volumes:
   pgdata:
   pinchy-secrets:
+  openclaw-config:
+  openclaw-workspaces:

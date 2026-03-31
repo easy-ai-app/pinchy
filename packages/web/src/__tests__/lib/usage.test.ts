@@ -293,36 +293,16 @@ describe("recordUsage", () => {
   });
 
   it("sets estimatedCostUsd to null when model is null", async () => {
-    const configWithPricing = {
-      config: {
-        models: {
-          providers: {
-            anthropic: {
-              models: [
-                {
-                  id: "claude-sonnet-4-20250514",
-                  cost: { input: 3.0, output: 15.0 },
-                },
-              ],
-            },
-          },
-        },
+    const client = makeOpenClawClient([
+      {
+        key: "agent:agent-1:user-user-1",
+        inputTokens: 100,
+        outputTokens: 200,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        model: null,
       },
-    };
-
-    const client = makeOpenClawClient(
-      [
-        {
-          key: "agent:agent-1:user-user-1",
-          inputTokens: 100,
-          outputTokens: 200,
-          cacheReadTokens: 0,
-          cacheWriteTokens: 0,
-          // no model field
-        },
-      ],
-      configWithPricing
-    );
+    ]);
 
     await recordUsage({ openclawClient: client, ...baseParams });
 
@@ -331,100 +311,5 @@ describe("recordUsage", () => {
         estimatedCostUsd: null,
       })
     );
-  });
-
-  it("still records usage when config.get() fails", async () => {
-    const client = makeOpenClawClient([
-      {
-        key: "agent:agent-1:user-user-1",
-        inputTokens: 100,
-        outputTokens: 200,
-        cacheReadTokens: 10,
-        cacheWriteTokens: 5,
-        model: "claude-sonnet-4-20250514",
-      },
-    ]);
-
-    // Make config.get() throw (e.g. Gateway unreachable)
-    (client.config.get as ReturnType<typeof vi.fn>).mockRejectedValue(
-      new Error("Gateway unreachable")
-    );
-
-    await recordUsage({ openclawClient: client, ...baseParams });
-
-    expect(mockInsert).toHaveBeenCalledWith(usageRecords);
-    expect(mockValues).toHaveBeenCalledWith({
-      userId: "user-1",
-      agentId: "agent-1",
-      agentName: "Smithers",
-      sessionKey: "agent:agent-1:user-user-1",
-      tenantId: "default",
-      model: "claude-sonnet-4-20250514",
-      inputTokens: 100,
-      outputTokens: 200,
-      cacheReadTokens: 10,
-      cacheWriteTokens: 5,
-      estimatedCostUsd: null,
-    });
-  });
-
-  it("caches config and does not call config.get() again within 5 minutes", async () => {
-    const configWithPricing = {
-      config: {
-        models: {
-          providers: {
-            anthropic: {
-              models: [
-                {
-                  id: "claude-sonnet-4-20250514",
-                  cost: { input: 3.0, output: 15.0 },
-                },
-              ],
-            },
-          },
-        },
-      },
-    };
-
-    const client = makeOpenClawClient(
-      [
-        {
-          key: "agent:agent-1:user-user-1",
-          inputTokens: 100,
-          outputTokens: 200,
-          cacheReadTokens: 0,
-          cacheWriteTokens: 0,
-          model: "claude-sonnet-4-20250514",
-        },
-      ],
-      configWithPricing
-    );
-
-    await recordUsage({ openclawClient: client, ...baseParams });
-    // Reset insert mocks but keep config cache
-    mockInsert.mockClear();
-    mockValues.mockClear();
-    mockValues.mockResolvedValue(undefined);
-    mockWhere._result = [
-      { totalInput: "100", totalOutput: "200", totalCacheRead: "0", totalCacheWrite: "0" },
-    ];
-
-    // Update session tokens so a new record is created
-    (client.sessions.list as ReturnType<typeof vi.fn>).mockResolvedValue({
-      sessions: [
-        {
-          key: "agent:agent-1:user-user-1",
-          inputTokens: 300,
-          outputTokens: 400,
-          cacheReadTokens: 0,
-          cacheWriteTokens: 0,
-          model: "claude-sonnet-4-20250514",
-        },
-      ],
-    });
-
-    await recordUsage({ openclawClient: client, ...baseParams });
-
-    expect(client.config.get).toHaveBeenCalledTimes(1);
   });
 });

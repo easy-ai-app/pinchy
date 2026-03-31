@@ -61,17 +61,27 @@ export class TenantOpenClawPool {
     const client = new OpenClawClient({
       url: wsUrl,
       token,
-      clientId: `pinchy-tenant-${tenantId}`,
+      clientId: "gateway-client",
       clientVersion: "0.1.0",
       scopes: ["operator.admin"],
       deviceIdentityPath: DEVICE_IDENTITY_PATH,
-      autoReconnect: true,
+      autoReconnect: false,
       reconnectIntervalMs: 3000,
       maxReconnectAttempts: 10,
     });
 
     try {
-      await client.connect();
+      // Race connect against a timeout — if the challenge-response
+      // fails or the container is unreachable, we give up quickly
+      // instead of blocking the WebSocket init forever.
+      const CONNECT_TIMEOUT_MS = 15_000;
+      await Promise.race([
+        client.connect(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Connection timeout")), CONNECT_TIMEOUT_MS)
+        ),
+      ]);
+
       this.pool.set(tenantId, { client, lastUsed: Date.now() });
       console.log(`[openclaw-pool] Connected to tenant ${tenant.slug} at ${wsUrl}`);
 

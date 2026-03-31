@@ -51,30 +51,12 @@ scan_data_directories() {
   fi
 }
 
-# Auto-approve pending device pairing requests (needed for Docker networking
-# where connections come from container IPs, not localhost)
-auto_approve_devices() {
-    local token
-    token=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('/root/.openclaw/openclaw.json','utf8')).gateway.auth.token)}catch{}")
-    sleep 5
-    while true; do
-        openclaw devices approve --latest \
-            --url ws://127.0.0.1:18789 \
-            --token "$token" >/dev/null 2>&1 || true
-        sleep 5
-    done
-}
-
 install_plugin_deps
 scan_data_directories
 
 # OpenClaw rewrites openclaw.json on startup with root-only permissions.
 # Wait briefly, then fix permissions so Pinchy can write to it.
 (sleep 3 && fix_config_permissions) &
-
-# Start auto-approver in the background (needed for Docker networking
-# where connections come from container IPs, not localhost)
-auto_approve_devices &
 
 # Start gateway. The `openclaw gateway` command daemonizes — it spawns the
 # actual gateway process and exits immediately. In a container there's no
@@ -100,10 +82,6 @@ while true; do
     # Wait briefly, then fix permissions so Pinchy can write to it.
     (sleep 3 && fix_config_permissions) &
 
-    # Start auto-approver in the background
-    auto_approve_devices &
-    APPROVE_PID=$!
-
     # Wait for config change or process exit.
     # Grace period: OpenClaw rewrites openclaw.json on startup ("Config overwrite"),
     # which would immediately trigger inotifywait and cause a needless restart.
@@ -114,8 +92,8 @@ while true; do
     wait -n "$PID" "$WATCH_PID" 2>/dev/null || true
 
     echo "Restarting OpenClaw Gateway..."
-    kill "$PID" "$WATCH_PID" "$APPROVE_PID" 2>/dev/null || true
-    wait "$PID" "$WATCH_PID" "$APPROVE_PID" 2>/dev/null || true
+    kill "$PID" "$WATCH_PID" 2>/dev/null || true
+    wait "$PID" "$WATCH_PID" 2>/dev/null || true
 
     sleep 1
 done

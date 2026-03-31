@@ -7,8 +7,8 @@ import { appendAuditLog } from "@/lib/audit";
 import { recordUsage } from "@/lib/usage";
 import { SessionCache } from "@/server/session-cache";
 import { db } from "@/db";
-import { agents, users } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { agents, users, chatMessages } from "@/db/schema";
+import { eq, and, asc } from "drizzle-orm";
 
 const WS_OPEN = 1;
 const CONNECTION_TIMEOUT_MS = 10_000;
@@ -23,12 +23,6 @@ interface BrowserMessage {
   type: string;
   content: string | ContentPart[];
   agentId: string;
-}
-
-interface HistoryMessage {
-  role: string;
-  content?: unknown;
-  timestamp?: number;
 }
 
 export class ClientRouter {
@@ -115,6 +109,19 @@ export class ClientRouter {
         text = message.content;
       }
 
+      // Store user message in DB
+      db.insert(chatMessages)
+        .values({
+          tenantId: this.tenantId,
+          sessionKey,
+          role: "user",
+          content: text,
+          metadata: attachments.length > 0 ? { imageCount: attachments.length } : null,
+        })
+        .catch((err) => {
+          console.error("[chat] Failed to save user message:", err);
+        });
+
       const chatOptions: Record<string, unknown> = {
         agentId: message.agentId,
         sessionKey,
@@ -146,6 +153,8 @@ export class ClientRouter {
 
       const stream = this.openclawClient.chat(text, chatOptions);
 
+      let assistantContent = "";
+
       for await (const chunk of stream) {
         // Stop consuming the stream if the browser disconnected — frees
         // server resources while letting OpenClaw finish on its side.
@@ -156,6 +165,7 @@ export class ClientRouter {
         if (chunk.type === "text") {
           const cleaned = chunk.text.replace(/<\/?final>/g, "");
           if (cleaned) {
+            assistantContent += cleaned;
             this.sendToClient(clientWs, {
               type: "chunk",
               content: cleaned,
@@ -175,6 +185,31 @@ export class ClientRouter {
         }
 
         if (chunk.type === "done") {
+          // If agent produced no content, surface a user-friendly error.
+          // Common cause: provider API key is invalid/expired (401).
+          if (!assistantContent) {
+            this.sendToClient(clientWs, {
+              type: "error",
+              message:
+                "The agent didn't produce a response. This usually means the AI provider returned an error — check that a valid API key is configured in Settings → Provider.",
+              messageId,
+            });
+          }
+
+          // Store assistant response in DB
+          if (assistantContent) {
+            db.insert(chatMessages)
+              .values({
+                tenantId: this.tenantId,
+                sessionKey,
+                role: "assistant",
+                content: assistantContent,
+              })
+              .catch((err) => {
+                console.error("[chat] Failed to save assistant message:", err);
+              });
+          }
+
           this.sessionCache.add(sessionKey);
           this.sendToClient(clientWs, {
             type: "done",
@@ -197,6 +232,7 @@ export class ClientRouter {
           // creates a separate assistant message — consistent with
           // how OpenClaw stores them in history.
           messageId = crypto.randomUUID();
+          assistantContent = "";
         }
       }
     } catch (err) {
@@ -215,42 +251,24 @@ export class ClientRouter {
     const sessionKey = this.computeSessionKey(agent.id);
 
     try {
-      await this.waitForConnection();
-
-      // Always fetch history directly from OpenClaw — the session cache
-      // can miss sessions (e.g. after agent switching or timing gaps)
-      const result = (await this.openclawClient.sessions.history(sessionKey)) as {
-        messages?: HistoryMessage[];
-      };
-      const rawMessages = result?.messages ?? [];
-
-      const messages = rawMessages
-        .filter((msg) => msg.role === "user" || msg.role === "assistant")
-        .map((msg) => {
-          let content: string;
-          if (Array.isArray(msg.content)) {
-            content = msg.content
-              .filter((part: { type: string; text?: string }) => part.type === "text" && part.text)
-              .map((part: { text?: string }) => part.text!)
-              .join(" ");
-          } else {
-            content = typeof msg.content === "string" ? msg.content : "";
-          }
-
-          // Strip protocol tags from assistant responses
-          content = content.replace(/<\/?final>/g, "");
-
-          // Strip OpenClaw timestamp prefix from user messages
-          if (msg.role === "user") {
-            content = content.replace(/^\[.*?\]\s*/, "");
-          }
-
-          return {
-            role: msg.role as "user" | "assistant",
-            content,
-            timestamp: msg.timestamp,
-          };
+      // Read history from PostgreSQL (DB-based persistence)
+      const rows = await db
+        .select({
+          role: chatMessages.role,
+          content: chatMessages.content,
+          createdAt: chatMessages.createdAt,
         })
+        .from(chatMessages)
+        .where(eq(chatMessages.sessionKey, sessionKey))
+        .orderBy(asc(chatMessages.createdAt));
+
+      const messages = rows
+        .filter((msg) => msg.role === "user" || msg.role === "assistant")
+        .map((msg) => ({
+          role: msg.role as "user" | "assistant",
+          content: msg.content,
+          timestamp: msg.createdAt?.toISOString(),
+        }))
         .filter((msg) => msg.content);
 
       if (messages.length > 0) {
@@ -263,7 +281,7 @@ export class ClientRouter {
         this.sendToClient(clientWs, { type: "history", messages: greetingMessages });
       }
     } catch (_err) {
-      // If history fetch fails (e.g. session doesn't exist), fall back to greeting
+      // If history fetch fails, fall back to greeting
       const greeting = await this.getPersonalizedGreeting(agent.greetingMessage);
       const greetingMessages = greeting ? [{ role: "assistant", content: greeting }] : [];
       this.sendToClient(clientWs, { type: "history", messages: greetingMessages });

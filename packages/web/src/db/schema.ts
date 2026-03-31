@@ -353,6 +353,29 @@ export const skills = pgTable(
   ]
 );
 
+// ── Chat Messages ───────────────────────────────────────────────────
+
+export const chatMessages = pgTable(
+  "chat_messages",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    tenantId: text("tenant_id")
+      .notNull()
+      .references(() => tenants.id),
+    sessionKey: text("session_key").notNull(),
+    role: text("role").notNull(), // "user" | "assistant"
+    content: text("content").notNull(),
+    metadata: jsonb("metadata"), // token counts, model, etc.
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_chat_messages_session").on(table.sessionKey, table.createdAt),
+    index("idx_chat_messages_tenant").on(table.tenantId),
+  ]
+);
+
 // ── Views ────────────────────────────────────────────────────────────
 
 export const activeAgents = pgView("active_agents").as((qb) =>

@@ -3,6 +3,7 @@ import { randomBytes } from "crypto";
 import { dirname } from "path";
 import { PROVIDERS, type ProviderName } from "@/lib/providers";
 import { getDefaultModel } from "@/lib/provider-models";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { agents, channelLinks } from "@/db/schema";
 import { getSetting } from "@/lib/settings";
@@ -218,9 +219,14 @@ export async function regenerateOpenClawConfig() {
   // Merge our plugin IDs into the existing allow list. OpenClaw adds its own
   // plugins (e.g. "telegram") to plugins.allow — if we overwrite the list,
   // OpenClaw sees a diff and triggers a full gateway restart every time.
+  // IMPORTANT: Only keep plugins that have a corresponding entry OR are OpenClaw-native.
+  // Stale pinchy-* entries in allow without matching entries cause config validation errors
+  // ("must have required property 'agents'") which make OpenClaw drop its agent registry.
   const existingAllow = ((existing.plugins as Record<string, unknown>)?.allow as string[]) || [];
   const ourPlugins = Object.keys(entries);
-  const allowedPlugins = [...new Set([...existingAllow, ...ourPlugins])];
+  const pinchyPluginNames = ["pinchy-files", "pinchy-context", "pinchy-audit"];
+  const externalPlugins = existingAllow.filter((p) => !pinchyPluginNames.includes(p));
+  const allowedPlugins = [...new Set([...externalPlugins, ...ourPlugins])];
 
   if (allowedPlugins.length > 0 || Object.keys(entries).length > 0) {
     config.plugins = { allow: allowedPlugins, entries };
@@ -265,16 +271,120 @@ export async function regenerateOpenClawConfig() {
     mkdirSync(dir, { recursive: true });
   }
 
-  // Only write if content actually changed — prevents unnecessary OpenClaw restarts
+  // Only write global config if content actually changed — prevents unnecessary OpenClaw restarts
   const newContent = JSON.stringify(config, null, 2);
+  let globalChanged = true;
   try {
     const existing = readFileSync(CONFIG_PATH, "utf-8");
-    if (existing === newContent) return;
+    if (existing === newContent) globalChanged = false;
   } catch {
     // File doesn't exist yet — write it
   }
 
-  writeFileSync(CONFIG_PATH, newContent, { encoding: "utf-8", mode: 0o644 });
+  if (globalChanged) {
+    writeFileSync(CONFIG_PATH, newContent, { encoding: "utf-8", mode: 0o644 });
+  }
+
+  // Always push config to per-tenant containers — tenant settings may have
+  // changed even when the global config file is unchanged.
+  try {
+    const { tenantContainerManager } = await import("@/lib/tenant-container-manager");
+    await tenantContainerManager.refreshAllTenantConfigs();
+  } catch (err) {
+    // Non-fatal — container push is best-effort
+    console.error(
+      "[openclaw-config] Failed to refresh tenant containers:",
+      err instanceof Error ? err.message : err
+    );
+  }
+}
+
+// ── Per-tenant config generation ─────────────────────────────────────
+
+/**
+ * Build OpenClaw config JSON for a specific tenant.
+ * Reads only that tenant's agents, provider keys, and channels.
+ * Used to push config into per-tenant Docker containers.
+ */
+export async function buildTenantConfig(tenantId: string, gatewayToken: string): Promise<string> {
+  // Read only this tenant's agents
+  const tenantAgents = await db.select().from(agents).where(eq(agents.tenantId, tenantId));
+
+  // Read provider API keys for this tenant
+  const env: Record<string, string> = {};
+  for (const [, providerConfig] of Object.entries(PROVIDERS)) {
+    const apiKey = await getSetting(providerConfig.settingsKey, tenantId);
+    if (apiKey) {
+      env[providerConfig.envVar] = apiKey;
+    }
+  }
+
+  // Read default provider for this tenant
+  const defaultProvider = (await getSetting("default_provider", tenantId)) as ProviderName | null;
+  const defaults: Record<string, unknown> = {};
+  if (defaultProvider && PROVIDERS[defaultProvider]) {
+    defaults.model = { primary: await getDefaultModel(defaultProvider) };
+  }
+
+  // Build agents list (no plugin refs — per-tenant containers don't have plugins installed)
+  const agentsList = tenantAgents.map((agent) => {
+    const agentEntry: Record<string, unknown> = {
+      id: agent.id,
+      name: agent.name,
+      model: agent.model,
+      workspace: getOpenClawWorkspacePath(agent.id),
+    };
+
+    const allowedTools = (agent.allowedTools as string[]) || [];
+    const deniedGroups = computeDeniedGroups(allowedTools);
+    if (deniedGroups.length > 0) {
+      agentEntry.tools = { deny: deniedGroups };
+    }
+
+    return agentEntry;
+  });
+
+  const config: Record<string, unknown> = {
+    gateway: {
+      mode: "local",
+      bind: "lan",
+      auth: { mode: "token", token: gatewayToken },
+    },
+    env,
+    agents: {
+      defaults,
+      list: agentsList,
+    },
+  };
+
+  // NOTE: No plugins section — per-tenant containers don't have pinchy-files/context/audit
+  // installed. Plugin references would cause "plugin not found" warnings and config-invalid loops.
+
+  // Build Telegram channel config for this tenant
+  for (const agent of tenantAgents) {
+    const botToken = await getSetting(`telegram_bot_token:${agent.id}`, tenantId);
+    if (botToken) {
+      const links = await db.select().from(channelLinks).where(eq(channelLinks.tenantId, tenantId));
+      const identityLinks: Record<string, string[]> = {};
+      for (const link of links) {
+        if (link.channel === "telegram") {
+          identityLinks[link.userId] = [`telegram:${link.channelUserId}`];
+        }
+      }
+
+      config.channels = {
+        telegram: { enabled: true, botToken, dmPolicy: "pairing" },
+      };
+      config.bindings = [{ agentId: agent.id, match: { channel: "telegram" } }];
+      config.session = {
+        dmScope: "per-peer",
+        ...(Object.keys(identityLinks).length > 0 && { identityLinks }),
+      };
+      break;
+    }
+  }
+
+  return JSON.stringify(config, null, 2);
 }
 
 // ── Types for config patch helpers ────────────────────────────────────────

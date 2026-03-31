@@ -124,6 +124,26 @@ vi.mock("drizzle-orm", () => ({
   isNull: vi.fn((col: unknown) => ({ type: "isNull", col })),
 }));
 
+// Mock node:fs for device identity file reading
+vi.mock("node:fs", () => ({
+  default: {
+    readFileSync: vi
+      .fn()
+      .mockReturnValue(
+        JSON.stringify({ deviceId: "test-device-id", publicKey: "test-public-key" })
+      ),
+  },
+}));
+
+// Mock node:crypto for random token generation
+vi.mock("node:crypto", () => ({
+  default: {
+    randomBytes: vi.fn().mockReturnValue({
+      toString: vi.fn().mockReturnValue("mock-random-token"),
+    }),
+  },
+}));
+
 import { TenantContainerManager } from "../tenant-container-manager";
 
 describe("TenantContainerManager", () => {
@@ -131,6 +151,7 @@ describe("TenantContainerManager", () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    process.env.TENANT_CONFIG_PUSH_DELAY_MS = "0";
     manager = new TenantContainerManager();
   });
 
@@ -163,7 +184,7 @@ describe("TenantContainerManager", () => {
       const createCall = mockCreateContainer.mock.calls[0][0];
       expect(createCall.Image).toBe("pinchy-openclaw");
       expect(createCall.name).toBe("pinchy-openclaw-acme");
-      expect(createCall.HostConfig.Memory).toBe(536870912); // 512MB
+      expect(createCall.HostConfig.Memory).toBe(2147483648); // 2GB
       expect(createCall.HostConfig.NanoCpus).toBe(500000000); // 0.5 CPU
       expect(createCall.HostConfig.NetworkMode).toBe("pinchy_default");
 

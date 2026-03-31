@@ -10,10 +10,8 @@ export default async function ChooseWorkspacePage() {
   const session = await requireAuth();
   const userId = session.user.id;
 
-  // If cookie already set, go straight to app
   const cookieStore = await cookies();
-  const existingTenant = cookieStore.get("pinchy-tenant")?.value;
-  if (existingTenant) redirect("/");
+  const cookieTenantId = cookieStore.get("pinchy-tenant")?.value;
 
   // Fetch user's tenants
   const userTenants = await db
@@ -30,6 +28,11 @@ export default async function ChooseWorkspacePage() {
       and(eq(tenantMembers.tenantId, tenants.id), eq(tenantMembers.userId, userId))
     )
     .where(isNull(tenants.deletedAt));
+
+  // If cookie points to a valid (non-deleted) tenant, go straight to app
+  if (cookieTenantId && userTenants.some((t) => t.id === cookieTenantId)) {
+    redirect("/");
+  }
 
   // Single tenant — no need to pick, let the app layout resolve it
   if (userTenants.length <= 1) {

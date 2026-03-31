@@ -1,12 +1,15 @@
+import crypto from "node:crypto";
+import fs from "node:fs";
 import Docker from "dockerode";
 import { db } from "@/db";
 import { tenants } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
-import { encrypt } from "@/lib/encryption";
+import { encrypt, decrypt } from "@/lib/encryption";
+import { buildTenantConfig } from "@/lib/openclaw-config";
 
 const OPENCLAW_IMAGE = process.env.OPENCLAW_IMAGE || "pinchy-openclaw";
 const DOCKER_NETWORK = process.env.DOCKER_NETWORK || "pinchy_default";
-const MEMORY_LIMIT = parseInt(process.env.TENANT_MEMORY_LIMIT || "536870912", 10); // 512MB
+const MEMORY_LIMIT = parseInt(process.env.TENANT_MEMORY_LIMIT || "2147483648", 10); // 2GB
 const CPU_LIMIT = parseFloat(process.env.TENANT_CPU_LIMIT || "0.5");
 const GATEWAY_TOKEN_POLL_INTERVAL_MS = 1000;
 const GATEWAY_TOKEN_MAX_WAIT_MS = 60000;
@@ -60,6 +63,10 @@ export class TenantContainerManager {
         },
       });
 
+      // Pre-pair the Pinchy device identity BEFORE starting the container.
+      // OpenClaw loads paired.json on startup and won't hot-reload it.
+      await this.pairDeviceWithVolume(volumeNames.config);
+
       // Start container
       await container.start();
 
@@ -85,6 +92,17 @@ export class TenantContainerManager {
           errorMessage: null,
         })
         .where(eq(tenants.id, tenant.id));
+
+      // Wait for OpenClaw to fully initialize and write its meta section to the config.
+      // Pushing too early causes "missing-meta-vs-last-good" anomaly.
+      const delay = parseInt(process.env.TENANT_CONFIG_PUSH_DELAY_MS || "8000", 10);
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+
+      // Push tenant-specific config (agents, providers, plugins) to the container.
+      // Without this, the container starts with empty config and /v1/chat/completions returns 404.
+      await this.pushConfigToContainer(tenant.id, containerName, token);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown provisioning error";
       await db
@@ -142,6 +160,168 @@ export class TenantContainerManager {
       stream.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
       stream.on("error", reject);
     });
+  }
+
+  /**
+   * Pre-pair the Pinchy gateway-client device inside the tenant container.
+   * Reads the device identity file (deviceId + publicKey) and writes a
+   * paired.json directly into the container so OpenClaw trusts the connection
+   * immediately — no polling `openclaw devices approve` needed.
+   */
+  /**
+   * Write paired.json into a config volume BEFORE the container starts.
+   * Uses a temporary alpine container to write to the named volume.
+   * OpenClaw loads paired.json on startup and won't hot-reload it,
+   * so the file must exist before the gateway process reads it.
+   */
+  private async pairDeviceWithVolume(configVolumeName: string): Promise<void> {
+    const identityPath = process.env.DEVICE_IDENTITY_PATH || "/app/secrets/device-identity.json";
+    const raw = fs.readFileSync(identityPath, "utf-8");
+    const identity: { deviceId: string; publicKeyPem?: string; publicKey?: string } =
+      JSON.parse(raw);
+
+    // Extract base64url public key from PEM (Ed25519 SPKI: last 32 bytes)
+    let publicKey = identity.publicKey;
+    if (!publicKey && identity.publicKeyPem) {
+      const pem = identity.publicKeyPem.replace(/-----[^-]+-----/g, "").replace(/\s/g, "");
+      const der = Buffer.from(pem, "base64");
+      publicKey = der.slice(der.length - 32).toString("base64url");
+    }
+    if (!publicKey) {
+      console.warn("[tenants] No public key found in device identity — skipping device pairing");
+      return;
+    }
+
+    const token = crypto.randomBytes(32).toString("base64url");
+    const now = Date.now();
+
+    const pairedJson = {
+      [identity.deviceId]: {
+        deviceId: identity.deviceId,
+        publicKey,
+        platform: "linux",
+        clientId: "gateway-client",
+        clientMode: "backend",
+        role: "operator",
+        roles: ["operator"],
+        scopes: [
+          "operator.admin",
+          "operator.read",
+          "operator.write",
+          "operator.approvals",
+          "operator.pairing",
+        ],
+        approvedScopes: [
+          "operator.admin",
+          "operator.read",
+          "operator.write",
+          "operator.approvals",
+          "operator.pairing",
+        ],
+        tokens: {
+          operator: {
+            token,
+            role: "operator",
+            scopes: [
+              "operator.admin",
+              "operator.approvals",
+              "operator.pairing",
+              "operator.read",
+              "operator.write",
+            ],
+            createdAtMs: now,
+          },
+        },
+        createdAtMs: now,
+        approvedAtMs: now,
+      },
+    };
+
+    const payload = JSON.stringify(pairedJson);
+
+    // Write to volume using a temporary helper container
+    const helper = await this.docker.createContainer({
+      Image: "alpine:latest",
+      Cmd: [
+        "sh",
+        "-c",
+        `mkdir -p /config/devices && echo '${payload.replace(/'/g, "'\\''")}' > /config/devices/paired.json`,
+      ],
+      HostConfig: {
+        Binds: [`${configVolumeName}:/config`],
+        AutoRemove: true,
+      },
+    });
+
+    await helper.start();
+    await helper.wait();
+  }
+
+  /**
+   * Push tenant-specific OpenClaw config into a running container via docker exec.
+   * MERGES our settings into the existing config to preserve OpenClaw's internal
+   * _meta section. A full overwrite causes "missing-meta-vs-last-good" anomaly
+   * which prevents the gateway from binding to its port.
+   */
+  async pushConfigToContainer(
+    tenantId: string,
+    containerName: string,
+    gatewayToken: string
+  ): Promise<void> {
+    try {
+      const configJson = await buildTenantConfig(tenantId, gatewayToken);
+      const container = this.docker.getContainer(containerName);
+
+      // Merge our config into existing (preserving _meta and other OpenClaw internals).
+      // The Node script reads the existing file, deep-merges our keys, and writes back.
+      const mergeScript = `
+        const fs = require('fs');
+        const our = ${configJson};
+        let existing = {};
+        try { existing = JSON.parse(fs.readFileSync('/root/.openclaw/openclaw.json', 'utf8')); } catch {}
+        // Preserve _meta and any internal keys, overlay our settings
+        const merged = { ...existing, ...our };
+        // Keep gateway.auth.token from our config (not existing, which may be stale)
+        merged.gateway = { ...existing.gateway, ...our.gateway };
+        merged.gateway.auth = our.gateway.auth;
+        fs.writeFileSync('/root/.openclaw/openclaw.json', JSON.stringify(merged, null, 2), { mode: 0o644 });
+      `;
+      const exec = await container.exec({
+        Cmd: ["node", "-e", mergeScript],
+        AttachStdout: true,
+        AttachStderr: true,
+      });
+      const stream = await exec.start({ Detach: false, Tty: false });
+      const output = await this.streamToString(stream);
+      if (output.trim()) {
+        console.log(`[tenants] Config merge output for ${containerName}:`, output.trim());
+      }
+
+      console.log(`[tenants] Pushed config to container ${containerName}`);
+    } catch (error) {
+      console.error(
+        `[tenants] Failed to push config to ${containerName}:`,
+        error instanceof Error ? error.message : error
+      );
+    }
+  }
+
+  /**
+   * Refresh config in all running tenant containers.
+   * Called when global settings change (provider keys, agent updates, etc.)
+   */
+  async refreshAllTenantConfigs(): Promise<void> {
+    const runningTenants = await db
+      .select()
+      .from(tenants)
+      .where(and(eq(tenants.status, "running"), isNull(tenants.deletedAt)));
+
+    for (const tenant of runningTenants) {
+      if (tenant.containerName && tenant.gatewayToken) {
+        const token = decrypt(tenant.gatewayToken);
+        await this.pushConfigToContainer(tenant.id, tenant.containerName, token);
+      }
+    }
   }
 
   /**
